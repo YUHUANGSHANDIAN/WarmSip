@@ -104,12 +104,19 @@ jobs:
           sudo dpkg -i src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
           xvfb-run -a sh -c 'warmsip > /tmp/warmsip.log 2>&1 & pid=$!; sleep 8; kill -0 "$pid"; result=$?; kill "$pid" || true; cat /tmp/warmsip.log; exit "$result"'
       - if: runner.os == 'macOS'
-        name: Verify ad-hoc signature and launch process
+        name: Mount DMG, verify ad-hoc signature and launch installed copy
         run: |
-          codesign --verify --deep --strict src-tauri/target/${{ matrix.target }}/release/bundle/macos/WarmSip.app
-          open src-tauri/target/${{ matrix.target }}/release/bundle/macos/WarmSip.app
+          mountpoint="$RUNNER_TEMP/warmsip-dmg"
+          mkdir "$mountpoint"
+          hdiutil attach src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg -readonly -nobrowse -mountpoint "$mountpoint"
+          trap 'hdiutil detach "$mountpoint"' EXIT
+          ditto "$mountpoint/WarmSip.app" "$RUNNER_TEMP/WarmSip.app"
+          codesign --verify --deep --strict "$RUNNER_TEMP/WarmSip.app"
+          open "$RUNNER_TEMP/WarmSip.app"
           sleep 8
           pgrep -x warmsip
+          sw_vers
+          uname -m
       - run: node scripts/package.mjs desktop ${{ matrix.platform }} src-tauri/target/${{ matrix.target }}/release/bundle
       - run: node scripts/checksums.mjs --out=artifacts/${{ matrix.platform }}/SHA256SUMS-${{ matrix.platform }} artifacts/${{ matrix.platform }}
       - run: node scripts/checksums.mjs --verify --out=artifacts/${{ matrix.platform }}/SHA256SUMS-${{ matrix.platform }}
