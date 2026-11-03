@@ -34,4 +34,4 @@ Linux 需要 WebKitGTK 4.1、GTK3、libappindicator3、librsvg、patchelf；AppI
 
 发布工作流先调用核心质量工作流，再独立编译平台。只有发布准备/上传任务拥有 `contents: write`，构建任务只有读取权限。每个平台的打包脚本核实真实文件数量后生成版本化文件名、提交 SHA 与元数据；上传前再次校验 SHA256。下载文件可在所在目录用 `sha256sum -c SHA256SUMS` 核验，Windows 可用 `Get-FileHash -Algorithm SHA256` 对照。
 
-Android 模拟器脚本安装 debug APK，创建地图并验证重启后仍存在，保存 UI 截图和设备信息。Linux 的安装与进程存活、macOS 的签名与进程存活检查只属于启动冒烟验证，不代替原生文件/定位/分享的核心流程验证。
+Android 模拟器脚本安装 debug APK，创建地图、地点和照片，强制停止后核验照片和故事恢复，再通过系统 Back 返回地图详情，保存 UI 截图和设备信息。脚本同时要求原生窗口焦点；已知 Quickstep 系统弹窗恢复会留证，应用自身异常不会被忽略。Linux 的安装与进程存活、macOS 的签名与进程存活检查只属于启动冒烟验证，不代替原生文件/定位/分享的核心流程验证。

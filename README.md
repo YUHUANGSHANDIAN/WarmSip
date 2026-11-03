@@ -8,7 +8,7 @@ WarmSip 0.1.0 是无需注册的本地关怀记录应用：保存收礼人档案
 
 [预发布下载](https://github.com/YUHUANGSHANDIAN/WarmSip/releases/tag/v0.1.0) · [CI](https://github.com/YUHUANGSHANDIAN/WarmSip/actions) · [变更记录](docs/CHANGELOG.md) · [构建发布](docs/RELEASE.md)
 
-[桌面首页截图](docs/screenshots/home-desktop.png) · [移动深色主题](docs/screenshots/home-mobile-dark.png) · [移动暖迹地图](docs/screenshots/map-mobile.png)
+[桌面首页截图](docs/screenshots/home-desktop.png) · [移动深色主题](docs/screenshots/home-mobile-dark.png) · [移动暖迹地图](docs/screenshots/map-mobile.png) · [Android 原生验收](docs/screenshots/android-native.png)
 
 ## 在本地运行
 
