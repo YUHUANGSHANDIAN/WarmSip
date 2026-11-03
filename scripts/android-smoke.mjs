@@ -7,6 +7,57 @@ await mkdir(output, { recursive: true });
 const adb = (...args) =>
   execFileSync("adb", args, { encoding: "utf8", timeout: 30000 });
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const launcherRecoveries = [];
+
+// CDP can interact with a WebView behind a system dialog. Require native input
+// focus as well, and record any recovery of the emulator's unrelated launcher.
+// Never dismiss an application ANR or ignore a missing WarmSip window.
+async function requireAppFocus(stage) {
+  for (let attempt = 0; attempt < 15; attempt++) {
+    const windows = adb("shell", "dumpsys", "window");
+    const focus = windows.match(/mCurrentFocus=[^\r\n]*/)?.[0] ?? "";
+    if (
+      focus.includes(`${pkg}/.MainActivity`) ||
+      focus.includes(`${pkg}/${pkg}.MainActivity`)
+    )
+      return;
+    await writeFile(`${output}/window-${stage}.txt`, windows);
+    if (focus.includes("Application Not Responding")) {
+      adb("shell", "uiautomator", "dump", "/sdcard/warmsip-window.xml");
+      const xml = adb("shell", "cat", "/sdcard/warmsip-window.xml");
+      await writeFile(`${output}/window-${stage}.xml`, xml);
+      const close = xml.match(
+        /<node\b[^>]*resource-id="android:id\/aerr_close"[^>]*>/,
+      )?.[0];
+      const bounds = close?.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (
+        /Quickstep isn(?:'|’|&apos;|&#39;)t responding/.test(xml) &&
+        bounds &&
+        launcherRecoveries.length < 2
+      ) {
+        await writeFile(
+          `${output}/launcher-anr-${launcherRecoveries.length + 1}.png`,
+          execFileSync("adb", ["exec-out", "screencap", "-p"]),
+        );
+        console.info(`Recovering emulator Quickstep ANR before ${stage}`);
+        launcherRecoveries.push(stage);
+        adb(
+          "shell",
+          "input",
+          "tap",
+          String(Math.round((Number(bounds[1]) + Number(bounds[3])) / 2)),
+          String(Math.round((Number(bounds[2]) + Number(bounds[4])) / 2)),
+        );
+      } else {
+        throw new Error(
+          `Unexpected native system dialog before ${stage}: ${focus}`,
+        );
+      }
+    }
+    await delay(1000);
+  }
+  throw new Error(`WarmSip did not receive native input focus before ${stage}`);
+}
 
 // Android WebView exposes page-level CDP, but it does not implement the browser
 // context commands sent by Playwright's connectOverCDP. Talk to its page target.
@@ -67,7 +118,9 @@ class WebViewSession {
       if (await this.evaluate(fn, ...args)) return;
       await delay(400);
     }
-    throw new Error(`Android UI did not reach expected state: ${args.join(" ")}`);
+    throw new Error(
+      `Android UI did not reach expected state: ${args.join(" ")}`,
+    );
   }
 
   close() {
@@ -82,7 +135,11 @@ async function connect() {
     try {
       const pid = adb("shell", "pidof", pkg).trim();
       if (!/^\d+$/.test(pid)) throw new Error("Application process not ready");
-      adb("forward", "tcp:9222", `localabstract:webview_devtools_remote_${pid}`);
+      adb(
+        "forward",
+        "tcp:9222",
+        `localabstract:webview_devtools_remote_${pid}`,
+      );
       const response = await fetch("http://127.0.0.1:9222/json/list", {
         signal: AbortSignal.timeout(2000),
       });
@@ -110,7 +167,9 @@ async function connect() {
       await delay(3000);
       if (
         !(await session.evaluate(
-          () => document.readyState === "complete" && !!document.querySelector("#root"),
+          () =>
+            document.readyState === "complete" &&
+            !!document.querySelector("#root"),
         ))
       )
         throw new Error("Android WebView reloaded during startup");
@@ -152,6 +211,7 @@ try {
   adb("install", "-r", "android/app/build/outputs/apk/debug/app-debug.apk");
   adb("shell", "am", "start", "-W", "-n", `${pkg}/.MainActivity`);
   session = await connect();
+  await requireAppFocus("initial-launch");
   console.info("Android WebView is stable; starting map flow");
   await session.waitFor(() => !!document.querySelector("a[href='#/maps']"));
   await session.evaluate(clickText, "a", "暖迹地图");
@@ -187,12 +247,16 @@ try {
 
   // Feed an image through the real Android WebView's file input. The Android
   // system picker itself is outside this automated check and is not claimed.
-  const image = (await readFile("public/brand/icon-192.png")).toString("base64");
+  const image = (await readFile("public/brand/icon-192.png")).toString(
+    "base64",
+  );
   await session.evaluate((base64) => {
     const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
     const transfer = new DataTransfer();
     transfer.items.add(new File([bytes], "icon.png", { type: "image/png" }));
-    const input = document.querySelector('input[type="file"][aria-label="添加照片"]');
+    const input = document.querySelector(
+      'input[type="file"][aria-label="添加照片"]',
+    );
     if (!input) throw new Error("Missing photo input");
     input.files = transfer.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
@@ -207,6 +271,7 @@ try {
       (h) => h.textContent.trim() === "Android 暖迹验收",
     ),
   );
+  await requireAppFocus("created-map");
   await writeFile(
     `${output}/created-map.png`,
     execFileSync("adb", ["exec-out", "screencap", "-p"]),
@@ -218,12 +283,13 @@ try {
   adb("shell", "am", "force-stop", pkg);
   adb("shell", "am", "start", "-W", "-n", `${pkg}/.MainActivity`);
   session = await connect();
+  await requireAppFocus("process-restart");
   console.info("Android process restarted; checking persisted records");
   await session.waitFor(() => !!document.querySelector("a[href='#/maps']"));
   await session.evaluate(clickText, "a", "暖迹地图");
   await session.waitFor(() => {
-    const heading = [...document.querySelectorAll("a h3")].find(
-      (h) => h.textContent.includes("我和 TA 的暖迹图"),
+    const heading = [...document.querySelectorAll("a h3")].find((h) =>
+      h.textContent.includes("我和 TA 的暖迹图"),
     );
     if (!heading) return false;
     heading.closest("a").click();
@@ -239,14 +305,15 @@ try {
     () =>
       document.querySelectorAll('button[aria-label="移除此照片"]').length === 1,
   );
-  const story = await session.evaluate(() =>
-    [...document.querySelectorAll("label.field")]
-      .find(
-        (l) =>
-          l.querySelector("span")?.textContent.trim() ===
-          "属于这个地点的小故事",
-      )
-      ?.querySelector("textarea")?.value,
+  const story = await session.evaluate(
+    () =>
+      [...document.querySelectorAll("label.field")]
+        .find(
+          (l) =>
+            l.querySelector("span")?.textContent.trim() ===
+            "属于这个地点的小故事",
+        )
+        ?.querySelector("textarea")?.value,
   );
   if (story !== "进程重启后保留照片与故事。")
     throw new Error("Android story was not restored after restart");
@@ -258,6 +325,7 @@ try {
     });
   });
   await delay(2000);
+  await requireAppFocus("native-back");
   console.info(
     "Before native Back:",
     JSON.stringify(
@@ -301,6 +369,7 @@ try {
         restartPersistence: true,
         photoRestored: true,
         nativeBack: true,
+        launcherRecoveries,
         automation:
           "Installed debug APK / actual Android WebView over page-level CDP; image injected into file input, system picker not asserted",
         webView: await session.evaluate(() => navigator.userAgent),
@@ -314,6 +383,10 @@ try {
   console.info("Android persistence and native back flow passed");
 } catch (error) {
   try {
+    await writeFile(
+      `${output}/failure-window.txt`,
+      adb("shell", "dumpsys", "window"),
+    );
     await writeFile(
       `${output}/failure.png`,
       execFileSync("adb", ["exec-out", "screencap", "-p"]),
