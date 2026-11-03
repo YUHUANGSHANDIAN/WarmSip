@@ -251,6 +251,13 @@ try {
   if (story !== "进程重启后保留照片与故事。")
     throw new Error("Android story was not restored after restart");
   console.info("Photo and story restored after Android process restart");
+  await session.evaluate(() => {
+    window.__nativeBackEvents = 0;
+    document.addEventListener("backbutton", () => {
+      window.__nativeBackEvents++;
+    });
+  });
+  await delay(2000);
   console.info(
     "Before native Back:",
     JSON.stringify(
@@ -258,6 +265,7 @@ try {
         hash: location.hash,
         history: history.state,
         active: document.activeElement?.tagName,
+        nativeBackEvents: window.__nativeBackEvents,
       })),
     ),
   );
@@ -270,6 +278,7 @@ try {
         hash: location.hash,
         history: history.state,
         active: document.activeElement?.tagName,
+        nativeBackEvents: window.__nativeBackEvents,
       })),
     ),
   );
