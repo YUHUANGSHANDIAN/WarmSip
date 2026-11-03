@@ -78,6 +78,7 @@ class WebViewSession {
 async function connect() {
   let lastError;
   for (let attempt = 0; attempt < 60; attempt++) {
+    let socket;
     try {
       const pid = adb("shell", "pidof", pkg).trim();
       if (!/^\d+$/.test(pid)) throw new Error("Application process not ready");
@@ -87,10 +88,13 @@ async function connect() {
       });
       const targets = await response.json();
       const target = targets.find(
-        (item) => item.type === "page" && item.webSocketDebuggerUrl,
+        (item) =>
+          item.type === "page" &&
+          item.webSocketDebuggerUrl &&
+          /^https:\/\/localhost\//.test(item.url),
       );
       if (!target) throw new Error("Android WebView page not ready");
-      const socket = new WebSocket(target.webSocketDebuggerUrl);
+      socket = new WebSocket(target.webSocketDebuggerUrl);
       await Promise.race([
         new Promise((resolve, reject) => {
           socket.addEventListener("open", resolve, { once: true });
@@ -102,9 +106,18 @@ async function connect() {
       ]);
       const session = new WebViewSession(socket);
       await session.send("Runtime.enable");
+      await session.waitFor(() => document.readyState === "complete");
+      await delay(3000);
+      if (
+        !(await session.evaluate(
+          () => document.readyState === "complete" && !!document.querySelector("#root"),
+        ))
+      )
+        throw new Error("Android WebView reloaded during startup");
       return session;
     } catch (error) {
       lastError = error;
+      socket?.close();
       await delay(1000);
     }
   }
@@ -139,6 +152,7 @@ try {
   adb("install", "-r", "android/app/build/outputs/apk/debug/app-debug.apk");
   adb("shell", "am", "start", "-W", "-n", `${pkg}/.MainActivity`);
   session = await connect();
+  console.info("Android WebView is stable; starting map flow");
   await session.waitFor(() => !!document.querySelector("a[href='#/maps']"));
   await session.evaluate(clickText, "a", "暖迹地图");
   await session.waitFor(() =>
@@ -197,12 +211,14 @@ try {
     `${output}/created-map.png`,
     execFileSync("adb", ["exec-out", "screencap", "-p"]),
   );
+  console.info("Map, place, and photo saved in Android WebView");
 
   session.close();
   session = undefined;
   adb("shell", "am", "force-stop", pkg);
   adb("shell", "am", "start", "-W", "-n", `${pkg}/.MainActivity`);
   session = await connect();
+  console.info("Android process restarted; checking persisted records");
   await session.waitFor(() => !!document.querySelector("a[href='#/maps']"));
   await session.evaluate(clickText, "a", "暖迹地图");
   await session.waitFor(() =>
@@ -267,6 +283,7 @@ try {
       2,
     ),
   );
+  console.info("Android persistence and native back flow passed");
 } catch (error) {
   try {
     await writeFile(
