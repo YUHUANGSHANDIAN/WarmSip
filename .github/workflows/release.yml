@@ -1,0 +1,201 @@
+name: WarmSip prerelease
+
+on:
+  push:
+    tags: ["v0.1.0"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    uses: ./.github/workflows/ci.yml
+
+  prepare:
+    needs: quality
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"
+          gh release view "$GITHUB_REF_NAME" || gh release create "$GITHUB_REF_NAME" --verify-tag --prerelease --title "WarmSip $GITHUB_REF_NAME · 预发布" --notes-file docs/RELEASE_NOTES.md
+
+  web:
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24.22.2, cache: npm }
+      - run: npm ci
+      - run: npm run build
+      - run: npm run server:build
+      - run: node scripts/package.mjs web
+      - run: node scripts/checksums.mjs --out=artifacts/web/SHA256SUMS-web artifacts/web
+      - run: node scripts/checksums.mjs --verify --out=artifacts/web/SHA256SUMS-web
+      - uses: actions/upload-artifact@v4
+        with:
+          { name: release-web, path: artifacts/web, if-no-files-found: error }
+
+  desktop:
+    needs: quality
+    name: build-${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {
+              platform: windows-x64,
+              runner: windows-2025,
+              target: x86_64-pc-windows-msvc,
+              bundles: nsis,
+            }
+          - {
+              platform: linux-x64,
+              runner: ubuntu-24.04,
+              target: x86_64-unknown-linux-gnu,
+              bundles: "appimage,deb",
+            }
+          - {
+              platform: macos-arm64,
+              runner: macos-15,
+              target: aarch64-apple-darwin,
+              bundles: dmg,
+            }
+          - {
+              platform: macos-x64,
+              runner: macos-15-intel,
+              target: x86_64-apple-darwin,
+              bundles: dmg,
+            }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24.22.2, cache: npm }
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.99.0"
+          targets: ${{ matrix.target }}
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb
+      - run: npm ci
+      - run: npx tauri build --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - if: runner.os == 'Linux'
+        name: Install DEB and launch WebView under Xvfb
+        run: |
+          sudo dpkg -i src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
+          xvfb-run -a sh -c 'warmsip > /tmp/warmsip.log 2>&1 & pid=$!; sleep 8; kill -0 "$pid"; result=$?; kill "$pid" || true; cat /tmp/warmsip.log; exit "$result"'
+      - if: runner.os == 'macOS'
+        name: Verify ad-hoc signature and launch process
+        run: |
+          codesign --verify --deep --strict src-tauri/target/${{ matrix.target }}/release/bundle/macos/WarmSip.app
+          open src-tauri/target/${{ matrix.target }}/release/bundle/macos/WarmSip.app
+          sleep 8
+          pgrep -x warmsip
+      - run: node scripts/package.mjs desktop ${{ matrix.platform }} src-tauri/target/${{ matrix.target }}/release/bundle
+      - run: node scripts/checksums.mjs --out=artifacts/${{ matrix.platform }}/SHA256SUMS-${{ matrix.platform }} artifacts/${{ matrix.platform }}
+      - run: node scripts/checksums.mjs --verify --out=artifacts/${{ matrix.platform }}/SHA256SUMS-${{ matrix.platform }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: artifacts/${{ matrix.platform }}
+          if-no-files-found: error
+
+  android:
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24.22.2, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: npm run android:sync
+      - run: bash android/gradlew -p android assembleDebug --no-daemon
+      - run: node scripts/package.mjs android
+      - run: node scripts/checksums.mjs --out=artifacts/android/SHA256SUMS-android artifacts/android
+      - run: node scripts/checksums.mjs --verify --out=artifacts/android/SHA256SUMS-android
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          script: node scripts/android-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          {
+            name: release-android,
+            path: artifacts/android,
+            if-no-files-found: error,
+          }
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          {
+            name: android-evidence,
+            path: artifacts/android-evidence,
+            if-no-files-found: ignore,
+          }
+
+  publish:
+    needs: [quality, prepare, web, desktop, android]
+    if: always() && needs.quality.result == 'success' && needs.prepare.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [web, windows-x64, linux-x64, macos-arm64, macos-x64, android]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download this platform only
+        id: artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh run download "$GITHUB_RUN_ID" -n 'release-${{ matrix.platform }}' -D release-assets; then
+            echo 'available=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'No compiled artifact for ${{ matrix.platform }}; see its build job.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - if: steps.artifact.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd release-assets
+          sha256sum -c SHA256SUMS-${{ matrix.platform }}
+          gh release upload "$GITHUB_REF_NAME" * --clobber
+
+  checksums:
+    needs: [prepare, publish]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$GITHUB_REF_NAME" --dir downloaded --pattern 'SHA256SUMS-*'
+          cat downloaded/SHA256SUMS-* | sort -k2 > SHA256SUMS
+          gh release upload "$GITHUB_REF_NAME" SHA256SUMS --clobber
