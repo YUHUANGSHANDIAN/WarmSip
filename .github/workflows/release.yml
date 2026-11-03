@@ -4,6 +4,12 @@ on:
   push:
     tags: ["v0.1.0"]
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Build scope for validation; tag releases always build all platforms
+        type: choice
+        default: all
+        options: [all, android, desktop, web]
 
 permissions:
   contents: read
@@ -29,6 +35,7 @@ jobs:
 
   web:
     needs: quality
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'web'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -47,6 +54,7 @@ jobs:
 
   desktop:
     needs: quality
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'desktop'
     name: build-${{ matrix.platform }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
@@ -96,12 +104,19 @@ jobs:
           sudo dpkg -i src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
           xvfb-run -a sh -c 'warmsip > /tmp/warmsip.log 2>&1 & pid=$!; sleep 8; kill -0 "$pid"; result=$?; kill "$pid" || true; cat /tmp/warmsip.log; exit "$result"'
       - if: runner.os == 'macOS'
-        name: Verify ad-hoc signature and launch process
+        name: Mount DMG, verify ad-hoc signature and launch installed copy
         run: |
-          codesign --verify --deep --strict src-tauri/target/${{ matrix.target }}/release/bundle/macos/WarmSip.app
-          open src-tauri/target/${{ matrix.target }}/release/bundle/macos/WarmSip.app
+          mountpoint="$RUNNER_TEMP/warmsip-dmg"
+          mkdir "$mountpoint"
+          hdiutil attach src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg -readonly -nobrowse -mountpoint "$mountpoint"
+          trap 'hdiutil detach "$mountpoint"' EXIT
+          ditto "$mountpoint/WarmSip.app" "$RUNNER_TEMP/WarmSip.app"
+          codesign --verify --deep --strict "$RUNNER_TEMP/WarmSip.app"
+          open "$RUNNER_TEMP/WarmSip.app"
           sleep 8
           pgrep -x warmsip
+          sw_vers
+          uname -m
       - run: node scripts/package.mjs desktop ${{ matrix.platform }} src-tauri/target/${{ matrix.target }}/release/bundle
       - run: node scripts/checksums.mjs --out=artifacts/${{ matrix.platform }}/SHA256SUMS-${{ matrix.platform }} artifacts/${{ matrix.platform }}
       - run: node scripts/checksums.mjs --verify --out=artifacts/${{ matrix.platform }}/SHA256SUMS-${{ matrix.platform }}
@@ -113,6 +128,7 @@ jobs:
 
   android:
     needs: quality
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'android'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -122,6 +138,8 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: "21" }
       - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0"
       - run: npm ci
       - run: npm run android:sync
       - run: bash android/gradlew -p android assembleDebug --no-daemon
@@ -138,6 +156,8 @@ jobs:
           api-level: 35
           arch: x86_64
           profile: pixel_6
+          cores: 4
+          ram-size: 4096M
           script: node scripts/android-smoke.mjs
       - uses: actions/upload-artifact@v4
         with:
