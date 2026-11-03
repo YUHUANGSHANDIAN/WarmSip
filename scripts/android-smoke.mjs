@@ -250,7 +250,29 @@ try {
   );
   if (story !== "进程重启后保留照片与故事。")
     throw new Error("Android story was not restored after restart");
+  console.info("Photo and story restored after Android process restart");
+  console.info(
+    "Before native Back:",
+    JSON.stringify(
+      await session.evaluate(() => ({
+        hash: location.hash,
+        history: history.state,
+        active: document.activeElement?.tagName,
+      })),
+    ),
+  );
   adb("shell", "input", "keyevent", "4");
+  await delay(1000);
+  console.info(
+    "After native Back:",
+    JSON.stringify(
+      await session.evaluate(() => ({
+        hash: location.hash,
+        history: history.state,
+        active: document.activeElement?.tagName,
+      })),
+    ),
+  );
   await session.waitFor(() =>
     [...document.querySelectorAll("h1")].some(
       (h) => h.textContent.trim() === "我和 TA 的暖迹图",

@@ -156,6 +156,8 @@ jobs:
           api-level: 35
           arch: x86_64
           profile: pixel_6
+          cores: 4
+          ram-size: 4096M
           script: node scripts/android-smoke.mjs
       - uses: actions/upload-artifact@v4
         with:
