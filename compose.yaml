@@ -1,0 +1,14 @@
+services:
+  warmsip-service:
+    build: .
+    ports:
+      - "127.0.0.1:8787:8787"
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8787
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
