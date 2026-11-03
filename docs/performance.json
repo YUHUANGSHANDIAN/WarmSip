@@ -1,0 +1,34 @@
+{
+  "date": "2026-11-03T08:15:28.267Z",
+  "cpu": "AMD Ryzen 7 4800H with Radeon Graphics         ",
+  "logicalProcessors": 16,
+  "memoryGiB": 15,
+  "os": "win32 10.0.26300",
+  "scope": "Synthetic local records, production Web build; no AMap SDK/tiles loaded, no real online map or native-device performance claim; one observed run, includes browser automation overhead",
+  "results": [
+    {
+      "profile": "desktop",
+      "records": 1000,
+      "media": 0,
+      "importMs": 320,
+      "mapListReadyMs": 943,
+      "statusFilterMs": 393,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.8078.4 Safari/537.36",
+      "domNodes": 6461,
+      "bodyWidth": 1440,
+      "viewportWidth": 1440
+    },
+    {
+      "profile": "Pixel 7 Chromium viewport",
+      "records": 1000,
+      "media": 0,
+      "importMs": 228,
+      "mapListReadyMs": 914,
+      "statusFilterMs": 381,
+      "userAgent": "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.8078.4 Mobile Safari/537.36",
+      "domNodes": 6461,
+      "bodyWidth": 412,
+      "viewportWidth": 412
+    }
+  ]
+}

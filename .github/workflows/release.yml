@@ -4,6 +4,12 @@ on:
   push:
     tags: ["v0.1.0"]
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Build scope for validation; tag releases always build all platforms
+        type: choice
+        default: all
+        options: [all, android, desktop, web]
 
 permissions:
   contents: read
@@ -29,6 +35,7 @@ jobs:
 
   web:
     needs: quality
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'web'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -47,6 +54,7 @@ jobs:
 
   desktop:
     needs: quality
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'desktop'
     name: build-${{ matrix.platform }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
@@ -113,6 +121,7 @@ jobs:
 
   android:
     needs: quality
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'android'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -122,6 +131,8 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: "21" }
       - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0"
       - run: npm ci
       - run: npm run android:sync
       - run: bash android/gradlew -p android assembleDebug --no-daemon

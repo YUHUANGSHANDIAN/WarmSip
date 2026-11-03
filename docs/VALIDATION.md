@@ -32,3 +32,16 @@ CI 重新执行类型、lint、Vitest、构建与 Playwright。平台构建从�
 HarmonyOS 缺 DevEco 官方稳定模板、SDK/OHPM/Hvigor 和签名。未伪造版本锁或 HAP。详见相应目录的阻塞清单。
 
 Windows 原生验收使用安装后的 `D:\\WarmSip\\warmsip.exe` 和 WebView2 本机调试连接，操作真实应用 UI、IndexedDB 和系统保存对话框。原生地图截图见 [windows-native.png](screenshots/windows-native.png)。调试端口只在验收启动环境中启用，未写入产品配置。
+
+Windows 外部导航：点击项目链接后原生页面保留，`plugin:opener|open_url` 实际调用成功。文件读取使用原生 WebView 的 file input 验证，未将自动化选文件等同于所有系统文件选择器交互已覆盖。
+
+## 本地规模性能
+
+Windows 10.0.26300，AMD Ryzen 7 4800H，16 逻辑处理器，约 15 GiB 可用物理内存规格，Chromium 156，生产 Web 构建。通过 ZIP 导入 1 张地图、1,000 个合成地点（四种状态各 250 条，无照片）。单次观测含自动化操作耗时：
+
+| 视口 | 事务导入 | 地点列表就绪 | 状态筛选 |
+| --- | ---: | ---: | ---: |
+| 桌面 1440×1000 | 320 ms | 943 ms | 393 ms |
+| Pixel 7 412px 移动视口 | 228 ms | 914 ms | 381 ms |
+
+两种视口均无横向溢出。原始数据见 `docs/performance.json`。未加载高德 SDK/底图，这些数字仅描述本地列表，不代表真实地图聚合性能或 Android 设备性能。
