@@ -221,16 +221,13 @@ try {
   console.info("Android process restarted; checking persisted records");
   await session.waitFor(() => !!document.querySelector("a[href='#/maps']"));
   await session.evaluate(clickText, "a", "暖迹地图");
-  await session.waitFor(() =>
-    [...document.querySelectorAll("a h3")].some(
-      (h) => h.textContent.trim() === "我和 TA 的暖迹图",
-    ),
-  );
-  await session.evaluate(() => {
+  await session.waitFor(() => {
     const heading = [...document.querySelectorAll("a h3")].find(
-      (h) => h.textContent.trim() === "我和 TA 的暖迹图",
+      (h) => h.textContent.includes("我和 TA 的暖迹图"),
     );
+    if (!heading) return false;
     heading.closest("a").click();
+    return true;
   });
   await session.waitFor(() =>
     [...document.querySelectorAll("h3")].some(
