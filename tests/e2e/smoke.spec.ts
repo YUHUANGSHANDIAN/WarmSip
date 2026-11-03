@@ -65,6 +65,13 @@ async function addPlace(page: Page, name: string) {
   await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
 }
 
+async function prepareScreenshot(page: Page) {
+  const close = page.getByRole("button", { name: "关闭提示", exact: true });
+  if (await close.isVisible()) await close.click();
+  await page.locator("main").focus();
+  await page.evaluate(() => window.scrollTo(0, 0));
+}
+
 test("多地图隔离、照片打卡、隐私分享与删除撤销", async ({ page }, info) => {
   const first = await createMap(page, "周末的小小暖迹");
   await addPlace(page, "午后的窗边");
@@ -78,9 +85,10 @@ test("多地图隔离、照片打卡、隐私分享与删除撤销", async ({ pa
   await page.getByLabel("加入私人备注").check();
   await expect(dialog.locator(".share-preview")).toContainText("只有自己知道");
   await page.keyboard.press("Escape");
+  await prepareScreenshot(page);
   await page.screenshot({
     path: info.outputPath(`map-${info.project.name}.png`),
-    fullPage: true,
+    fullPage: false,
   });
   const second = await createMap(page, "下一次出发");
   await expect(page.getByRole("heading", { name: "午后的窗边" })).toHaveCount(
@@ -222,11 +230,13 @@ test("关键页面明暗主题无障碍与移动布局", async ({ page }, info) 
           () => document.documentElement.scrollWidth <= window.innerWidth + 1,
         ),
       ).toBe(true);
-      if (route === "/")
+      if (route === "/") {
+        await prepareScreenshot(page);
         await page.screenshot({
           path: info.outputPath(`home-${theme}-${info.project.name}.png`),
-          fullPage: true,
+          fullPage: false,
         });
+      }
     }
   }
 });

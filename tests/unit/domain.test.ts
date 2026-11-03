@@ -139,7 +139,7 @@ describe("request cancellation", () => {
     resolveOld("old");
     await rejection;
   });
-  it("rejects a canceled result even when the upstream ignores abort", async () => {
+  it("cancels immediately even when the upstream ignores abort and never finishes", async () => {
     const latest = new LatestRequest();
     let finish!: (v: string) => void;
     const pending = latest.run(
@@ -152,7 +152,8 @@ describe("request cancellation", () => {
       name: "AbortError",
     });
     latest.cancel();
-    finish("ignored");
     await rejection;
+    expect(await latest.run(async () => "retry")).toBe("retry");
+    finish("ignored");
   });
 });

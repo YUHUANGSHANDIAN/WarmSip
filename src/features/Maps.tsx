@@ -95,9 +95,16 @@ const statusIcons = {
 export function MapsPage() {
   const { maps, places } = useData();
   const [search, setSearch] = useState("");
-  const visible = maps.filter(
-    (m) => m.title.includes(search) || m.city.includes(search),
-  );
+  const [sort, setSort] = useState("updated");
+  const visible = maps
+    .filter((m) => m.title.includes(search) || m.city.includes(search))
+    .sort((a, b) =>
+      sort === "title"
+        ? a.title.localeCompare(b.title, "zh-CN")
+        : sort === "created"
+          ? b.createdAt - a.createdAt
+          : b.updatedAt - a.updatedAt,
+    );
   return (
     <>
       <PageTitle
@@ -155,6 +162,15 @@ export function MapsPage() {
         <h2>
           我的暖迹图 <small>{maps.length}</small>
         </h2>
+        <select
+          aria-label="地图排序"
+          value={sort}
+          onChange={(e) => setSort(e.target.value)}
+        >
+          <option value="updated">最近更新</option>
+          <option value="created">最近创建</option>
+          <option value="title">按名称排序</option>
+        </select>
         <label className="search-input">
           <Search size={17} />
           <input

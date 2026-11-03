@@ -18,7 +18,7 @@ CI 重新执行类型、lint、Vitest、构建与 Playwright。平台构建从�
 
 | 平台 | 配置 | 编译 | 签名 | 安装启动 | 核心功能 | 上传 |
 | --- | --- | --- | --- | --- | --- | --- |
-| Windows x64 | 已配置 | 本机 Rust release 已编译；NSIS 重试中 | 未签名 | 待验证 | Web 共享逻辑已验，原生待验 | 待发布 |
+| Windows x64 | 已配置 | 本机 Rust release 和 NSIS 已生成 | 未签名 | 已安装至 D:\\WarmSip 并启动 WebView2 | 已在安装版创建地图、导入照片，关闭进程后重启恢复；通过系统保存对话框导出 ZIP 并重新导入校验重复跳过 | 待发布 |
 | Linux x64 | 已配置 | 等待 Runner | 无发行签名 | CI 执行 DEB 安装和 Xvfb 进程存活检查 | 原生交互未验 | 待发布 |
 | macOS arm64/x64 | 两架构已配置 | 等待 Runner | ad-hoc 计划，无 Developer ID/公证 | CI 执行签名检查和启动进程检查 | 原生交互未验 | 待发布 |
 | Android | 官方 Capacitor 工程已生成 | 等待 Runner | debug 计划 | CI 模拟器安装启动 | CI 地图创建与重启恢复脚本 | 待发布 |
@@ -30,3 +30,5 @@ CI 重新执行类型、lint、Vitest、构建与 Playwright。平台构建从�
 高德 JS/Web 服务标识和安全配置、AI HTTPS 上游/模型/密钥、部署服务地址与访问令牌未提供，真实 POI/地理编码/逆编码、地图 SDK、天气、AI 全部 **未联调**。真实拒绝定位、系统文件选择/分享、原生返回键、键盘安全区、不同系统大字体、实体设备和高密度真实地图性能需按设备继续验收。发布不将模拟测试标为在线测试。
 
 HarmonyOS 缺 DevEco 官方稳定模板、SDK/OHPM/Hvigor 和签名。未伪造版本锁或 HAP。详见相应目录的阻塞清单。
+
+Windows 原生验收使用安装后的 `D:\\WarmSip\\warmsip.exe` 和 WebView2 本机调试连接，操作真实应用 UI、IndexedDB 和系统保存对话框。原生地图截图见 [windows-native.png](screenshots/windows-native.png)。调试端口只在验收启动环境中启用，未写入产品配置。

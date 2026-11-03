@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-before-release-*/
 dist-server/
 coverage/
 playwright-report/

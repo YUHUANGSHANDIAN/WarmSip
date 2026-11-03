@@ -166,10 +166,21 @@ export class LatestRequest {
   async run<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> {
     this.cancel();
     const sequence = this.sequence;
-    this.current = new AbortController();
-    const value = await work(this.current.signal);
-    if (sequence !== this.sequence || this.current.signal.aborted)
-      throw new DOMException("旧请求已取消", "AbortError");
-    return value;
+    const controller = new AbortController();
+    this.current = controller;
+    let onAbort!: () => void;
+    const canceled = new Promise<never>((_, reject) => {
+      onAbort = () => reject(controller.signal.reason);
+      controller.signal.addEventListener("abort", onAbort, { once: true });
+    });
+    try {
+      const value = await Promise.race([work(controller.signal), canceled]);
+      if (sequence !== this.sequence || controller.signal.aborted)
+        throw new DOMException("旧请求已取消", "AbortError");
+      return value;
+    } finally {
+      controller.signal.removeEventListener("abort", onAbort);
+      if (this.current === controller) this.current = undefined;
+    }
   }
 }
