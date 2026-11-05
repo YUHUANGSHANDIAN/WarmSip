@@ -249,9 +249,7 @@ input[type="number"] {
   color: var(--muted);
   font-size: 14px;
   font-weight: 550;
-  transition:
-    background 0.15s,
-    color 0.15s;
+  transition: background 0.15s;
 }
 .nav-item:hover {
   background: var(--bg);
