@@ -21,6 +21,7 @@ import {
   useNotice,
   formatDate,
 } from "../components/ui";
+import { AIWritingAssistant } from "../components/AIWriting";
 import {
   saveRecord,
   softDelete,
@@ -29,9 +30,11 @@ import {
 } from "../storage/db";
 import {
   newEntity,
+  recommendationResultSchema,
   type GiftResult,
   type Recommendation,
   type RecommendationRequest,
+  type AIState,
 } from "../domain";
 import { resolveLocation, localInspiration } from "../services/context";
 import { LatestRequest, services } from "../services/api";
@@ -39,10 +42,12 @@ export function GiftResultCard({
   result,
   city,
   onSave,
+  onBlessingChange,
 }: {
   result: GiftResult;
   city: string;
   onSave?: () => void;
+  onBlessingChange?: (text: string) => void;
 }) {
   return (
     <div className="gift-result">
@@ -71,6 +76,13 @@ export function GiftResultCard({
         <Heart size={20} />
         <p>“{result.blessing}”</p>
       </div>
+      {onBlessingChange && (
+        <AIWritingAssistant
+          source={result.blessing}
+          label="润色这句祝福"
+          onApply={onBlessingChange}
+        />
+      )}
       <div className="health-notes">
         {result.healthTips.map((tip, i) => (
           <p key={i}>{tip}</p>
@@ -100,6 +112,8 @@ export function GiftPage() {
   const [consent, setConsent] = useState(false);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<Recommendation>();
+  const [streamText, setStreamText] = useState("");
+  const [aiState, setAiState] = useState<AIState>();
   const kind = params.get("kind") === "box" ? "box" : "normal";
   const profile = profiles.find((p) => p.id === profileId);
   const context = resolveLocation(manualCity, profile);
@@ -108,6 +122,20 @@ export function GiftPage() {
     const current = requests.current;
     return () => current.cancel();
   }, []);
+  useEffect(() => {
+    if (
+      mode !== "ai" ||
+      !settings.aiEnabled ||
+      !settings.serviceUrl
+    )
+      return;
+    const controller = new AbortController();
+    void services
+      .aiState(controller.signal)
+      .then(setAiState)
+      .catch(() => setAiState(undefined));
+    return () => controller.abort();
+  }, [mode, settings.aiEnabled, settings.serviceUrl]);
   const generate = async () => {
     if (pending) return;
     if (mode === "ai" && !consent) {
@@ -116,6 +144,7 @@ export function GiftPage() {
     }
     setPending(true);
     setResult(undefined);
+    setStreamText("");
     const input: RecommendationRequest = {
       relation: profile?.relation || "自己",
       likes: profile?.likes || "",
@@ -129,8 +158,72 @@ export function GiftPage() {
     try {
       const value = await requests.current.run(async (signal) =>
         mode === "ai"
-          ? services.recommend(input, signal)
-          : localInspiration(input),
+          ? new Promise<{
+              result: GiftResult;
+              providerId: string;
+              modelId: string;
+            }>((resolve, reject) => {
+              let providerId = "";
+              let modelId = "";
+              let final: GiftResult | undefined;
+              let streamError: Error | undefined;
+              void services
+                .streamAI(
+                  {
+                    taskId: "gift",
+                    payload: input,
+                    consent: {
+                      taskId: "gift",
+                      fields: [
+                        "关系",
+                        "城市",
+                        "场景",
+                        "预算",
+                        ...(settings.aiSendLikes && input.likes ? ["偏好"] : []),
+                        ...(settings.aiSendSensitive && input.allergies
+                          ? ["过敏"]
+                          : []),
+                        ...(settings.aiSendSensitive && input.diet
+                          ? ["饮食需求"]
+                          : []),
+                      ],
+                      includesSensitive: Boolean(
+                        settings.aiSendSensitive &&
+                          (input.allergies || input.diet),
+                      ),
+                      includesPhotos: false,
+                    },
+                    budget: {
+                      dailyUsd: settings.aiBudgetDailyUsd,
+                      monthlyUsd: settings.aiBudgetMonthlyUsd,
+                    },
+                  },
+                  (event) => {
+                    if (event.type === "start") {
+                      providerId = event.providerId;
+                      modelId = event.modelId;
+                    } else if (event.type === "delta") {
+                      setStreamText((text) => (text + event.delta).slice(-1200));
+                    } else if (event.type === "result") {
+                      final = recommendationResultSchema.parse(event.payload);
+                    } else if (event.type === "error") {
+                      streamError = new Error(event.message);
+                    }
+                  },
+                  signal,
+                )
+                .then(() => {
+                  if (streamError) reject(streamError);
+                  else if (!final) reject(new Error("AI 未返回结构化建议"));
+                  else resolve({ result: final, providerId, modelId });
+                })
+                .catch(reject);
+            })
+          : Promise.resolve({
+              result: localInspiration(input),
+              providerId: "",
+              modelId: "",
+            }),
       );
       const record: Recommendation = {
         ...newEntity(),
@@ -141,7 +234,13 @@ export function GiftPage() {
         budget,
         kind,
         source: mode,
-        result: value,
+        taskId: "gift",
+        providerId: value.providerId,
+        modelId: value.modelId,
+        modelVersion: "",
+        promptVersion: "gift-v2",
+        generatedAt: Date.now(),
+        result: value.result,
       };
       await saveRecord("recommendations", record);
       setResult(record);
@@ -150,6 +249,7 @@ export function GiftPage() {
         notice({ text: storageMessage(e), error: true });
     } finally {
       setPending(false);
+      setStreamText("");
     }
   };
   const save = () => {
@@ -163,6 +263,8 @@ export function GiftPage() {
         items: result.result.items,
         budget: result.budget,
         blessing: result.result.blessing,
+        source: "gift",
+        recommendationId: result.id,
         expectDate: "",
         status: "pending",
         note: "",
@@ -279,6 +381,18 @@ export function GiftPage() {
             </select>
           </Field>
           {mode === "ai" && (
+            <div className="ai-context-preview">
+              <strong>本次 AI 路由</strong>
+              <p>
+                {!settings.aiEnabled
+                  ? "AI 总开关尚未启用，请先到设置中授权。"
+                  : aiState?.routes.some((route) => route.taskId === "gift")
+                    ? `已选择 ${aiState.routes.find((route) => route.taskId === "gift")?.modelId}`
+                    : "尚未为 AI 选礼指定模型。"}
+              </p>
+            </div>
+          )}
+          {mode === "ai" && (
             <div className="consent-panel">
               <p>
                 将发送：关系、口味、过敏与忌口、饮食需求、城市、场景和预算。称呼、身体状态、私人备注、照片和足迹不发送。
@@ -330,8 +444,28 @@ export function GiftPage() {
                 result={result.result}
                 city={result.city}
                 onSave={save}
+                onBlessingChange={(blessing) =>
+                  setResult((current) =>
+                    current
+                      ? {
+                          ...current,
+                          result: { ...current.result, blessing },
+                        }
+                      : current,
+                  )
+                }
               />
+              {(result.providerId || result.modelId) && (
+                <p className="section-footnote">
+                  模型来源：{result.providerId} / {result.modelId}
+                </p>
+              )}
             </>
+          ) : pending && streamText ? (
+            <div className="gift-stream-preview" role="status">
+              <Badge tone="sage">正在生成 · 确认完整后才保存</Badge>
+              <pre>{streamText}</pre>
+            </div>
           ) : (
             <div className="gift-placeholder">
               <img src="./brand/icon.svg" alt="" />
@@ -382,6 +516,11 @@ export function HistoryPage() {
                     {formatDate(r.createdAt)} · {r.scene} ·{" "}
                     {r.city || "未指定城市"}
                   </p>
+                  {r.source === "ai" && (
+                    <small>
+                      {r.providerId || "未知提供商"} / {r.modelId || "旧记录未保存模型"}
+                    </small>
+                  )}
                 </button>
                 <Badge tone="warm">
                   {r.source === "ai"
@@ -420,6 +559,8 @@ export function HistoryPage() {
                         items: r.result.items,
                         budget: r.budget,
                         blessing: r.result.blessing,
+                        source: "gift",
+                        recommendationId: r.id,
                       });
                       notice({ text: "已加入心意清单" });
                     });

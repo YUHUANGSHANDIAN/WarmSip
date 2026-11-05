@@ -24,19 +24,36 @@ export function HomePage() {
   const { profiles, maps, places, orders } = useData();
   const settings = useSettings();
   const [weather, setWeather] = useState<Weather>();
+  const [weatherStatus, setWeatherStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
   useEffect(() => {
     setWeather(undefined);
+    setWeatherStatus("idle");
     if (!settings.city || !settings.serviceUrl) return;
+    setWeatherStatus("loading");
     const c = new AbortController();
     void services
       .weather(settings.city, c.signal)
-      .then(setWeather)
-      .catch(() => {});
+      .then((value) => {
+        setWeather(value);
+        setWeatherStatus("ready");
+      })
+      .catch((error) => {
+        if (!(error instanceof DOMException && error.name === "AbortError"))
+          setWeatherStatus("error");
+      });
     return () => c.abort();
   }, [settings.city, settings.serviceUrl]);
   const hour = new Date().getHours();
   const greeting = hour < 11 ? "早上好" : hour < 18 ? "下午好" : "晚上好";
   const anniversary = upcomingAnniversaries(profiles)[0];
+  const latestMap = [...maps].sort(
+    (a, b) => (b.lastViewedAt || b.updatedAt) - (a.lastViewedAt || a.updatedAt),
+  )[0];
+  const openOrder = orders.find(
+    (order) => !["gifted", "completed"].includes(order.status),
+  );
   return (
     <div className="home-page">
       <div className="welcome-row">
@@ -92,6 +109,53 @@ export function HomePage() {
           src="./brand/warm-moment.svg"
           alt="暖心杯子、手写卡片与记录美好地点的原创插画"
         />
+      </section>
+      <section className="daily-brief" aria-label="今天可以做的事">
+        <article>
+          <span className="eyebrow">TODAY'S LITTLE NUDGE</span>
+          <h2>今天的暖心建议</h2>
+          <p>
+            {profiles[0]
+              ? `为 ${profiles[0].name} 准备一个不需要很盛大的小惊喜，先从 TA 的一件偏好开始。`
+              : "先记下一位在意的 TA，或直接收藏一个想一起去的地方。"}
+          </p>
+          <Link
+            to={profiles[0] ? `/gifts?profile=${profiles[0].id}` : "/profiles/new"}
+            className="text-link"
+          >
+            开始今天的小行动 <ArrowRight size={15} />
+          </Link>
+        </article>
+        <article>
+          <span className="eyebrow">PICK UP WHERE YOU LEFT</span>
+          <h2>继续上次旅程</h2>
+          <p>
+            {latestMap
+              ? `回到「${latestMap.title}」，补上一处想去的街角或已经发生的回忆。`
+              : "从第一张暖迹图开始，把想一起去的远方慢慢收藏起来。"}
+          </p>
+          <Link
+            to={latestMap ? `/maps/${latestMap.id}` : "/maps/new"}
+            className="text-link"
+          >
+            {latestMap ? "继续暖迹" : "创建暖迹图"} <ArrowRight size={15} />
+          </Link>
+        </article>
+        <article>
+          <span className="eyebrow">A PROMISE TO KEEP</span>
+          <h2>待实现的心意</h2>
+          <p>
+            {openOrder
+              ? `${openOrder.title} 还在等待实现。今天可以推进一小步。`
+              : "还没有待实现的心意，也可以为平常的一天准备一点期待。"}
+          </p>
+          <Link
+            to={openOrder ? `/orders/${openOrder.id}` : "/orders/new"}
+            className="text-link"
+          >
+            {openOrder ? "继续准备" : "记录一份心意"} <ArrowRight size={15} />
+          </Link>
+        </article>
       </section>
       <section className="quick-grid" aria-label="快捷功能">
         {[
@@ -256,9 +320,13 @@ export function HomePage() {
               </>
             ) : (
               <>
-                <strong className="weather-unknown">慢一点，也很好</strong>
+                <strong className="weather-unknown">
+                  {weatherStatus === "loading" ? "正在读取天气" : "慢一点，也很好"}
+                </strong>
                 <p>
-                  {settings.city
+                  {weatherStatus === "error"
+                    ? `${settings.city} · 天气服务暂不可用，本地建议仍可使用`
+                    : settings.city
                     ? `${settings.city} · 实时天气暂不可用`
                     : "选一座城市，让关心更贴近 TA。"}
                 </p>

@@ -10,14 +10,15 @@ import {
   Plus,
   Heart,
   Hourglass,
-  Check,
   Trash2,
   MapPin,
   ArrowRight,
   Utensils,
   LockKeyhole,
+  Sparkles,
 } from "lucide-react";
 import { useData, useSettings } from "../components/data";
+import { AIWritingAssistant } from "../components/AIWriting";
 import {
   PageTitle,
   Empty,
@@ -29,6 +30,8 @@ import {
   useAction,
   useNotice,
   formatDate,
+  Photo,
+  PhotoPicker,
 } from "../components/ui";
 import { db, saveRecord, softDelete, restoreRecord } from "../storage/db";
 import {
@@ -38,15 +41,34 @@ import {
   type Order,
   type Capsule,
   snapshot,
+  aiCityGuideResultSchema,
+  orderStatusLabels,
 } from "../domain";
 import { canOpen, localDate } from "../services/time";
+import { services } from "../services/api";
+import { platform } from "../platform";
 
 export function OrdersPage() {
   const { orders } = useData();
   const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<"updated" | "date">("updated");
   const { run } = useAction();
   const notice = useNotice();
-  const visible = orders.filter((o) => filter === "all" || o.status === filter);
+  const visible = orders
+    .filter((o) => filter === "all" || o.status === filter)
+    .filter(
+      (o) =>
+        !search ||
+        o.title.includes(search) ||
+        o.profileName.includes(search) ||
+        o.placeSnapshot?.name.includes(search),
+    )
+    .sort((a, b) =>
+      sort === "date"
+        ? (a.expectDate || "9999").localeCompare(b.expectDate || "9999")
+        : b.updatedAt - a.updatedAt,
+    );
   return (
     <>
       <PageTitle
@@ -74,8 +96,16 @@ export function OrdersPage() {
       <div className="filter-row">
         {[
           ["all", "全部心意"],
-          ["pending", "等待实现"],
-          ["completed", "已经完成"],
+          ...(
+            [
+              "draft",
+              "planned",
+              "preparing",
+              "ready",
+              "gifted",
+              "completed",
+            ] as const
+          ).map((status) => [status, orderStatusLabels[status]] as const),
         ].map(([key, label]) => (
           <button
             key={key}
@@ -86,6 +116,24 @@ export function OrdersPage() {
           </button>
         ))}
       </div>
+      <div className="record-toolbar">
+        <label className="search-input">
+          <input
+            aria-label="搜索心意"
+            value={search}
+            placeholder="搜索标题、TA 或地点"
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
+        <select
+          aria-label="心意排序"
+          value={sort}
+          onChange={(event) => setSort(event.target.value as "updated" | "date")}
+        >
+          <option value="updated">最近更新</option>
+          <option value="date">按期望日期</option>
+        </select>
+      </div>
       {visible.length ? (
         <div className="record-grid">
           {visible.map((o) => (
@@ -95,7 +143,7 @@ export function OrdersPage() {
                   <Heart size={21} />
                 </div>
                 <Badge tone={o.status === "completed" ? "sage" : "warm"}>
-                  {o.status === "completed" ? "已经完成" : "等待实现"}
+                  {orderStatusLabels[o.status]}
                 </Badge>
               </div>
               <Link to={`/orders/${o.id}`}>
@@ -109,6 +157,12 @@ export function OrdersPage() {
                     {o.placeSnapshot.name}
                   </p>
                 )}
+                {o.reminderAt && (
+                  <p className="small-link">
+                    <Hourglass size={14} />
+                    应用内提醒 {new Date(o.reminderAt).toLocaleString("zh-CN")}
+                  </p>
+                )}
                 <p className="record-excerpt">
                   {o.items.map((x) => x.name).join(" · ") ||
                     o.note ||
@@ -117,27 +171,26 @@ export function OrdersPage() {
               </Link>
               <div className="card-footer">
                 <span>预算 ¥{o.budget}</span>
-                <button
-                  className="text-link"
-                  onClick={() => {
+                <select
+                  className="status-select"
+                  aria-label={`${o.title}的状态`}
+                  value={o.status === "pending" ? "planned" : o.status}
+                  onChange={(event) => {
+                    const status = event.target.value as Order["status"];
                     void run(async () => {
-                      await saveRecord("orders", {
-                        ...o,
-                        status:
-                          o.status === "completed" ? "pending" : "completed",
-                      });
-                      notice({
-                        text:
-                          o.status === "completed"
-                            ? "已改为等待实现"
-                            : "这份心意，已经完成",
-                      });
+                      await saveRecord("orders", { ...o, status });
+                      notice({ text: `状态已更新为${orderStatusLabels[status]}` });
                     });
                   }}
                 >
-                  <Check size={15} />
-                  {o.status === "completed" ? "重新计划" : "标记完成"}
-                </button>
+                  {(
+                    ["draft", "planned", "preparing", "ready", "gifted", "completed"] as const
+                  ).map((status) => (
+                    <option value={status} key={status}>
+                      {orderStatusLabels[status]}
+                    </option>
+                  ))}
+                </select>
               </div>
             </article>
           ))}
@@ -274,9 +327,21 @@ export function OrderForm() {
               value={form.status}
               onChange={(e) => set("status", e.target.value)}
             >
-              <option value="pending">等待实现</option>
-              <option value="completed">已经完成</option>
+              {(
+                ["draft", "planned", "preparing", "ready", "gifted", "completed"] as const
+              ).map((status) => (
+                <option value={status} key={status}>
+                  {orderStatusLabels[status]}
+                </option>
+              ))}
             </select>
+          </Field>
+          <Field label="应用内提醒时间（可选）">
+            <input
+              type="datetime-local"
+              value={form.reminderAt}
+              onChange={(event) => set("reminderAt", event.target.value)}
+            />
           </Field>
         </div>
         <Field label="关联地点">
@@ -323,6 +388,11 @@ export function OrderForm() {
             maxLength={2000}
             value={form.blessing}
             onChange={(e) => set("blessing", e.target.value)}
+          />
+          <AIWritingAssistant
+            source={form.blessing || "想为这份心意写一句真诚的话。"}
+            label="润色想说的话"
+            onApply={(blessing) => set("blessing", blessing)}
           />
         </Field>
         <Field label="私人备注">
@@ -489,6 +559,12 @@ export function CapsuleForm() {
             value={form.content}
             onChange={(e) => set("content", e.target.value)}
           />
+          <AIWritingAssistant
+            source={form.content}
+            label="润色胶囊内容"
+            scene="写给未来"
+            onApply={(content) => set("content", content)}
+          />
         </Field>
         <div className="form-grid">
           <Field label="开启日期">
@@ -554,6 +630,12 @@ export function CapsuleForm() {
             </select>
           </Field>
         </div>
+        <PhotoPicker
+          ids={form.photoIds}
+          max={4}
+          label="添加一张未来记忆"
+          onChange={(photoIds) => set("photoIds", photoIds)}
+        />
         <div className="form-actions">
           <SaveButton busy={busy}>保存时间胶囊</SaveButton>
         </div>
@@ -568,6 +650,7 @@ export function CapsuleDetail() {
   const notice = useNotice();
   const navigate = useNavigate();
   const [confirm, setConfirm] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [, tick] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => tick((x) => x + 1), 30000);
@@ -600,6 +683,13 @@ export function CapsuleDetail() {
           <>
             <div className="letter-text">{capsule.content}</div>
             {capsule.blessing && <p>{capsule.blessing}</p>}
+            {capsule.photoIds.length > 0 && (
+              <div className="photo-grid capsule-photos">
+                {capsule.photoIds.map((photoId) => (
+                  <Photo key={photoId} id={photoId} alt={capsule.title} />
+                ))}
+              </div>
+            )}
             {capsule.placeSnapshot && (
               <div className="linked-place">
                 <MapPin />
@@ -642,6 +732,11 @@ export function CapsuleDetail() {
           </p>
         )}
         <small>封存于 {formatDate(capsule.createdAt)}</small>
+        {capsule.openedAt && (
+          <button className="text-link" onClick={() => setSharing(true)}>
+            分享这份温暖
+          </button>
+        )}
         <button className="text-link danger" onClick={() => setConfirm(true)}>
           移入回收站
         </button>
@@ -666,12 +761,83 @@ export function CapsuleDetail() {
           </button>
         </Modal>
       )}
+      {sharing && (
+        <Modal title="分享前，确认内容" onClose={() => setSharing(false)}>
+          <p>将分享标题、正文和祝福。照片、地点快照和关联人不会自动包含。</p>
+          <pre className="share-preview">
+            {capsule.title}
+            {"\n\n"}
+            {capsule.content}
+            {capsule.blessing ? `\n\n${capsule.blessing}` : ""}
+            {"\n\nWarmSip · 给 TA 点一杯温暖"}
+          </pre>
+          <button
+            className="button primary"
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await platform.share(
+                  `${capsule.title}\n\n${capsule.content}${capsule.blessing ? `\n\n${capsule.blessing}` : ""}\n\nWarmSip · 给 TA 点一杯温暖`,
+                );
+                setSharing(false);
+                notice({ text: "已交给系统分享或复制到剪贴板" });
+              })
+            }
+          >
+            确认分享
+          </button>
+        </Modal>
+      )}
     </>
   );
 }
 export function CityPage() {
   const settings = useSettings();
   const [city, setCity] = useState(settings.city);
+  const [guide, setGuide] = useState<{
+    title: string;
+    summary: string;
+    themes: { name: string; why: string }[];
+    searchSuggestions: string[];
+  }>();
+  const { busy, run } = useAction();
+  const notice = useNotice();
+  const generateGuide = () =>
+    run(async () => {
+      if (!settings.aiEnabled) throw new Error("请先在设置中启用 AI");
+      if (!city.trim()) throw new Error("请先选择城市");
+      setGuide(undefined);
+      let next: typeof guide;
+      let error = "";
+      await services.streamAI(
+        {
+          taskId: "city-guide",
+          payload: { city, interests: ["食物", "文化", "散步"] },
+          consent: {
+            taskId: "city-guide",
+            fields: ["城市", "兴趣主题"],
+            includesSensitive: false,
+            includesPhotos: false,
+          },
+          budget: {
+            dailyUsd: settings.aiBudgetDailyUsd,
+            monthlyUsd: settings.aiBudgetMonthlyUsd,
+          },
+        },
+        (event) => {
+          if (event.type === "result")
+            next = aiCityGuideResultSchema.parse(event.payload);
+          if (event.type === "error") error = event.message;
+        },
+        new AbortController().signal,
+      );
+      if (error) throw new Error(error);
+      if (!next) throw new Error("AI 没有返回可用的城市导览");
+      setGuide(next);
+      notice({
+        text: "导览只提供灵感；点击建议后才会查询真实地点",
+      });
+    });
   return (
     <>
       <PageTitle
@@ -701,6 +867,15 @@ export function CityPage() {
               onChange={(e) => setCity(e.target.value)}
             />
           </Field>
+          <button
+            type="button"
+            className="button secondary"
+            disabled={busy}
+            onClick={generateGuide}
+          >
+            <Sparkles size={16} />
+            {busy ? "正在编辑导览…" : "生成 AI 城市导览"}
+          </button>
           <Link
             className="button primary"
             to={`/discover?city=${encodeURIComponent(city)}`}
@@ -710,6 +885,32 @@ export function CityPage() {
           </Link>
         </div>
       </section>
+      {guide && (
+        <section className="city-ai-guide" aria-labelledby="city-guide-title">
+          <Badge tone="sage">AI 城市灵感 · 非实时商家数据</Badge>
+          <h2 id="city-guide-title">{guide.title}</h2>
+          <p>{guide.summary}</p>
+          <div className="ai-guide-themes">
+            {guide.themes.map((theme) => (
+              <article key={theme.name}>
+                <h3>{theme.name}</h3>
+                <p>{theme.why}</p>
+              </article>
+            ))}
+          </div>
+          <div className="inline-links">
+            {guide.searchSuggestions.map((keyword) => (
+              <Link
+                key={keyword}
+                to={`/discover?city=${encodeURIComponent(city)}&keyword=${encodeURIComponent(keyword)}`}
+              >
+                查找「{keyword}」真实地点
+                <ArrowRight size={14} />
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
       <div className="record-grid">
         {[
           {

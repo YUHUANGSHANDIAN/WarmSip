@@ -23,12 +23,47 @@ export function resolveLocation(
 }
 export function localInspiration(input: RecommendationRequest): GiftResult {
   const sensitive = Boolean(input.allergies.trim() || input.diet.trim());
+  const boxIdeas = [
+    {
+      name: "一封只说今天的手写信",
+      category: "心意",
+      price: "自行安排",
+      store: "",
+      reason: "把具体的小事写下来，让惊喜落在一个真实的细节上。",
+    },
+    {
+      name: "一次不看手机的散步",
+      category: "陪伴",
+      price: "自行安排",
+      store: "",
+      reason: "留出一段完整的时间，比起复杂的安排更像认真陪伴。",
+    },
+    {
+      name: "为 TA 挑一首今天的声音",
+      category: "声音",
+      price: "自行安排",
+      store: "",
+      reason: "用一首歌记住今天，也把想说的话藏进播放列表。",
+    },
+    {
+      name: "一张可以马上兑现的小券",
+      category: "约定",
+      price: "自行安排",
+      store: "",
+      reason: "写下一个双方都轻松做到的约定，让期待有具体日期。",
+    },
+  ];
+  const start = input.kind === "box" ? Math.floor(Math.random() * boxIdeas.length) : 0;
+  const boxItems =
+    input.kind === "box"
+      ? [boxIdeas[start], boxIdeas[(start + 1) % boxIdeas.length]]
+      : [];
   return {
     summary:
       input.kind === "box"
         ? "今天的盲盒，是一份留给 TA 的小期待。"
         : "关心可以从一件很小的事开始。",
-    items: sensitive
+    items: sensitive && input.kind !== "box"
       ? [
           {
             name: "写一张手写关心卡",
@@ -45,7 +80,9 @@ export function localInspiration(input: RecommendationRequest): GiftResult {
             reason: "根据 TA 的意愿和天气安排，不涉及无法核实的配料。",
           },
         ]
-      : [
+      : input.kind === "box"
+        ? boxItems
+        : [
           {
             name: "一杯合 TA 口味的暖饮",
             category: "饮品",
