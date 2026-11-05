@@ -213,7 +213,7 @@ test("关键页面明暗主题无障碍与移动布局", async ({ page }, info) 
       await page.goto(`/#${route}`);
       await expect(page.locator("main h1")).toBeVisible();
       const results = await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
         .analyze();
       expect(
         results.violations.map((v) => ({
@@ -237,6 +237,22 @@ test("关键页面明暗主题无障碍与移动布局", async ({ page }, info) 
           fullPage: false,
         });
       }
+    }
+  }
+});
+
+test("关键页面在六档宽度没有横向溢出或标题挤压", async ({ page }) => {
+  for (const width of [360, 390, 430, 768, 1280, 1440, 1920]) {
+    await page.setViewportSize({ width, height: width < 900 ? 844 : 1000 });
+    for (const route of ["/", "/maps", "/gifts", "/profiles", "/orders", "/settings"]) {
+      await page.goto(`/#${route}`);
+      await expect(page.locator("main h1")).toBeVisible();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+        ),
+        `${width}px ${route}`,
+      ).toBe(true);
     }
   }
 });

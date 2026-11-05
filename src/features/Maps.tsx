@@ -30,6 +30,7 @@ import {
   Map as MapIcon,
   List,
   Compass,
+  Sparkles,
 } from "lucide-react";
 import {
   PageTitle,
@@ -64,6 +65,8 @@ import {
   type PlaceRecord,
   type Coordinate,
   type Poi,
+  aiMapIntentResultSchema,
+  aiStoryResultSchema,
 } from "../domain";
 import { localDate } from "../services/time";
 import { services, LatestRequest } from "../services/api";
@@ -392,6 +395,7 @@ export function MapDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { maps, places, profiles } = useData();
+  const settings = useSettings();
   const map = maps.find((m) => m.id === id);
   const notice = useNotice();
   const { run, busy } = useAction();
@@ -408,6 +412,11 @@ export function MapDetail() {
   const [confirm, setConfirm] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [backupConfirm, setBackupConfirm] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiMode, setAiMode] = useState<"search" | "story">("search");
+  const [aiQuery, setAiQuery] = useState("");
+  const [aiText, setAiText] = useState("");
+  const [aiStory, setAiStory] = useState<{ title: string; narrative: string; blessing: string }>();
   const pointer = useRef(0);
   const dragged = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -447,6 +456,97 @@ export function MapDetail() {
     saveSelectedPlace(id!, key);
     setFocus((f) => ({ id: key, seq: f.seq + 1 }));
   };
+  const runMapAI = () =>
+    run(async () => {
+      if (!map) throw new Error("地图不可用");
+      if (!settings.aiEnabled) throw new Error("请先在设置中启用 AI");
+      setAiText("");
+      if (aiMode === "search") {
+        if (!aiQuery.trim()) throw new Error("请描述想找的地方");
+        let intent: { keyword: string; category: string; city: string; radius: number } | undefined;
+        let streamError = "";
+        await services.streamAI(
+          {
+            taskId: "map-intent",
+            payload: {
+              query: aiQuery,
+              city: map.city,
+              longitude: viewport?.center.longitude,
+              latitude: viewport?.center.latitude,
+            },
+            consent: {
+              taskId: "map-intent",
+              fields: ["用户搜索描述", "城市"],
+              includesSensitive: false,
+              includesPhotos: false,
+            },
+            budget: {
+              dailyUsd: settings.aiBudgetDailyUsd,
+              monthlyUsd: settings.aiBudgetMonthlyUsd,
+            },
+          },
+          (event) => {
+            if (event.type === "delta") setAiText((value) => value + event.delta);
+            if (event.type === "result") intent = aiMapIntentResultSchema.parse(event.payload);
+            if (event.type === "error") streamError = event.message;
+          },
+          new AbortController().signal,
+        );
+        if (streamError) throw new Error(streamError);
+        if (!intent) throw new Error("AI 没有返回有效的搜索条件");
+        setAiOpen(false);
+        navigate(
+          `/discover?map=${encodeURIComponent(map.id)}&city=${encodeURIComponent(intent.city || map.city)}&keyword=${encodeURIComponent([intent.keyword, intent.category].filter(Boolean).join(" "))}`,
+        );
+        return;
+      }
+      if (!all.length) throw new Error("先记录至少一个地点，再生成足迹故事");
+      let result:
+        | { title: string; narrative: string; blessing: string }
+        | undefined;
+      let streamError = "";
+      await services.streamAI(
+        {
+          taskId: "story",
+          payload: {
+            mapTitle: map.title,
+            places: all.map((place) => ({
+              name: place.name,
+              note: settings.aiSendSensitive ? place.note : "",
+              mood: place.mood,
+              status: statusLabels[place.status],
+              visitedAt: place.visitedAt,
+            })),
+            tone: "温柔",
+          },
+          consent: {
+            taskId: "story",
+            fields: [
+              "地图标题",
+              "地点名称",
+              "地点状态",
+              "地点心情",
+              ...(settings.aiSendSensitive ? ["私人地点备注"] : []),
+            ],
+            includesSensitive: settings.aiSendSensitive,
+            includesPhotos: false,
+          },
+          budget: {
+            dailyUsd: settings.aiBudgetDailyUsd,
+            monthlyUsd: settings.aiBudgetMonthlyUsd,
+          },
+        },
+        (event) => {
+          if (event.type === "delta") setAiText((value) => value + event.delta);
+          if (event.type === "result") result = aiStoryResultSchema.parse(event.payload);
+          if (event.type === "error") streamError = event.message;
+        },
+        new AbortController().signal,
+      );
+      if (streamError) throw new Error(streamError);
+      if (!result) throw new Error("AI 没有返回有效的足迹故事");
+      setAiStory(result);
+    });
   if (!map)
     return (
       <div className="page-main">
@@ -496,6 +596,16 @@ export function MapDetail() {
                 <Edit3 size={16} />
                 编辑地图
               </Link>
+              <button
+                onClick={() => {
+                  setAiMode("search");
+                  setAiOpen(true);
+                  setMenu(false);
+                }}
+              >
+                <Compass size={16} />
+                AI 暖迹灵感
+              </button>
               <button
                 onClick={() => {
                   setSharing(true);
@@ -740,8 +850,105 @@ export function MapDetail() {
             <Share2 size={16} />
             分享暖迹
           </button>
+          <button
+            onClick={() => {
+              setAiMode("story");
+              setAiOpen(true);
+            }}
+          >
+            <Sparkles size={16} />
+            润色足迹故事
+          </button>
         </div>
       </section>
+      {aiOpen && (
+        <Modal
+          title={aiMode === "search" ? "用一句话找暖迹" : "把足迹写成故事"}
+          onClose={() => {
+            setAiOpen(false);
+            setAiStory(undefined);
+          }}
+        >
+          {aiMode === "search" ? (
+            <>
+              <p>
+                AI 只把描述转换成搜索条件，真实地点仍由高德 POI 服务返回。
+              </p>
+              <Field label="想找怎样的地方">
+                <textarea
+                  rows={3}
+                  value={aiQuery}
+                  onChange={(event) => setAiQuery(event.target.value)}
+                  placeholder="例如：适合安静聊天、雨天也能去的咖啡馆"
+                />
+              </Field>
+              <button className="button primary" disabled={busy} onClick={runMapAI}>
+                <Sparkles size={16} />
+                {busy ? "正在整理条件…" : "搜索真实地点"}
+              </button>
+            </>
+          ) : aiStory ? (
+            <>
+              <Field label="故事标题">
+                <input
+                  value={aiStory.title}
+                  onChange={(event) =>
+                    setAiStory((value) =>
+                      value ? { ...value, title: event.target.value } : value,
+                    )
+                  }
+                />
+              </Field>
+              <Field label="足迹故事">
+                <textarea
+                  rows={10}
+                  value={aiStory.narrative}
+                  onChange={(event) =>
+                    setAiStory((value) =>
+                      value ? { ...value, narrative: event.target.value } : value,
+                    )
+                  }
+                />
+              </Field>
+              <button
+                className="button primary"
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    await saveRecord("maps", {
+                      ...map,
+                      description: aiStory.narrative,
+                    });
+                    setAiOpen(false);
+                    setAiStory(undefined);
+                    notice({ text: "确认后的足迹故事已写入地图介绍" });
+                  })
+                }
+              >
+                确认并更新地图介绍
+              </button>
+            </>
+          ) : (
+            <>
+              <p>
+                只会发送地点名称、状态和心情。
+                {settings.aiSendSensitive
+                  ? "私人地点备注已由你的设置授权发送。"
+                  : "私人地点备注、照片和精确坐标不会发送。"}
+              </p>
+              <button className="button primary" disabled={busy} onClick={runMapAI}>
+                <Sparkles size={16} />
+                {busy ? "正在写下足迹…" : "生成可编辑故事"}
+              </button>
+            </>
+          )}
+          {aiText && !aiStory && (
+            <pre className="ai-stream-raw" aria-label="AI 流式生成内容">
+              {aiText.slice(-1200)}
+            </pre>
+          )}
+        </Modal>
+      )}
       {sharing && (
         <ShareMap
           map={map}
@@ -1646,6 +1853,7 @@ export function DiscoverPage() {
                           title: `在${p.name}准备一份心意`,
                           profileName: "TA",
                           placeSnapshot: snapshot(p),
+                          source: "map",
                           note: `场景：${scene}`,
                         });
                         notice({ text: "已加入心意清单" });
