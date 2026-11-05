@@ -16,6 +16,24 @@ const headers = {
   origin: "http://localhost:1420",
 };
 describe("service authorization and upstream boundaries", () => {
+  it("exposes only health without authentication and protects AI state", async () => {
+    const app = createServer(config);
+    try {
+      expect((await app.inject("/healthz")).statusCode).toBe(200);
+      expect((await app.inject("/api/v1/ai/state")).statusCode).toBe(401);
+      const state = await app.inject({
+        url: "/api/v1/ai/state",
+        headers,
+      });
+      expect(state.statusCode).toBe(200);
+      expect(state.json()).toMatchObject({
+        credentialManagementReady: false,
+        connections: [],
+      });
+    } finally {
+      await app.close();
+    }
+  });
   it("treats malformed upstream coordinates as an upstream failure", async () => {
     const fetcher = vi.fn(async () =>
       Response.json({
