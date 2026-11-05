@@ -15,7 +15,7 @@ try {
 await mkdir(web, { recursive: true });
 await cp(dist, web, { recursive: true, force: false, errorOnExist: true });
 const manifest = {
-  version: "0.1.0",
+  version: "0.2.0-beta.1",
   generatedAt: new Date().toISOString(),
   source: "dist",
   note: "ArkWeb 只加载本地应用壳；地图资源按需走服务端代理，不写入离线缓存。",

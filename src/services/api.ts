@@ -6,6 +6,14 @@ import {
   type RecommendationRequest,
   type Capabilities,
 } from "../domain";
+import {
+  aiStateSchema,
+  type AIState,
+  type AIStreamEvent,
+  type AIConnectionInput,
+  type AITaskRoute,
+  type AIRunRequest,
+} from "../domain";
 import { getSettings } from "../storage/db";
 let accessToken = "";
 export function setAccessToken(token: string) {
@@ -78,6 +86,22 @@ export async function apiRequest(
     clearTimeout(timer);
     init.signal?.removeEventListener("abort", abort);
   }
+}
+async function serviceContext() {
+  const settings = await getSettings();
+  const base = validateServiceUrl(settings.serviceUrl);
+  if (!base)
+    throw new ServiceError(
+      "尚未配置在线服务，可继续使用本地功能",
+      "NOT_CONFIGURED",
+    );
+  return {
+    base,
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+  };
 }
 const capabilitiesSchema = z.object({
   ai: z.boolean(),
@@ -155,6 +179,115 @@ export const services = {
           { signal },
         ),
       ),
+  aiState: async (signal?: AbortSignal): Promise<AIState> =>
+    aiStateSchema.parse(
+      await apiRequest("/ai/state", { signal }, 30000),
+    ),
+  saveAIConnection: async (
+    input: AIConnectionInput,
+    signal?: AbortSignal,
+  ) =>
+    apiRequest(
+      "/ai/connections",
+      { method: "POST", body: JSON.stringify(input), signal },
+      30000,
+    ),
+  testAIConnection: async (id: string, signal?: AbortSignal) =>
+    apiRequest(
+      `/ai/connections/${encodeURIComponent(id)}/test`,
+      { method: "POST", signal },
+      30000,
+    ),
+  refreshAIModels: async (id: string, signal?: AbortSignal) =>
+    apiRequest(
+      `/ai/connections/${encodeURIComponent(id)}/refresh-models`,
+      { method: "POST", signal },
+      30000,
+    ),
+  removeAIConnection: async (id: string, signal?: AbortSignal) =>
+    apiRequest(`/ai/connections/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      signal,
+    }),
+  setAITaskRoutes: async (routes: AITaskRoute[], signal?: AbortSignal) =>
+    apiRequest("/ai/task-routes", {
+      method: "PUT",
+      body: JSON.stringify({ routes }),
+      signal,
+    }),
+  clearAIUsage: async (signal?: AbortSignal) =>
+    apiRequest("/ai/usage", { method: "DELETE", signal }),
+  clearAIData: async (signal?: AbortSignal) =>
+    apiRequest("/ai/state", { method: "DELETE", signal }, 30000),
+  startOpenRouterOAuth: async (signal?: AbortSignal) =>
+    z
+      .object({
+        flowId: z.string(),
+        expiresAt: z.number(),
+      })
+      .parse(
+        await apiRequest("/ai/oauth/openrouter/start", {
+          method: "POST",
+          signal,
+        }),
+      ),
+  openRouterOAuthStatus: async (flowId: string, signal?: AbortSignal) =>
+    z
+      .object({
+        status: z.enum(["pending", "complete", "failed", "cancelled"]),
+        url: z.string(),
+        message: z.string(),
+        expiresAt: z.number(),
+      })
+      .parse(
+        await apiRequest(`/ai/oauth/${encodeURIComponent(flowId)}`, {
+          signal,
+        }),
+      ),
+  streamAI: async (
+    input: AIRunRequest,
+    onEvent: (event: AIStreamEvent) => void,
+    signal: AbortSignal,
+  ) => {
+    const { base, headers } = await serviceContext();
+    const response = await fetch(`${base}/api/v1/ai/stream`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(input),
+      signal,
+    });
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as {
+        message?: string;
+        code?: string;
+      };
+      throw new ServiceError(
+        data.message || "AI 服务暂不可用",
+        data.code || String(response.status),
+      );
+    }
+    if (!response.body) throw new ServiceError("AI 流式响应不可用");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const frames = buffer.split(/\r?\n\r?\n/);
+      buffer = frames.pop() || "";
+      for (const frame of frames) {
+        const data = frame
+          .split(/\r?\n/)
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).trim())
+          .join("\n");
+        if (!data) continue;
+        const event = JSON.parse(data) as AIStreamEvent;
+        onEvent(event);
+      }
+    }
+  },
 };
 export class LatestRequest {
   private current?: AbortController;

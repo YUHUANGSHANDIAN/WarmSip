@@ -39,6 +39,32 @@ export class WarmDatabase extends Dexie {
       media: "id",
       settings: "id",
     });
+    this.version(2)
+      .stores({
+        profiles: "id,updatedAt,archivedAt",
+        maps: "id,updatedAt,lastViewedAt,profileId",
+        places: "id,mapId,status,updatedAt,profileId,orderId",
+        recommendations: "id,createdAt,profileId,providerId,modelId",
+        orders: "id,updatedAt,profileId,status",
+        capsules: "id,openDate,mapId,placeId",
+        media: "id",
+        settings: "id",
+      })
+      .upgrade(async (transaction) => {
+        for (const [name, schema] of Object.entries(recordSchemas))
+          await transaction
+            .table(name)
+            .toCollection()
+            .modify((record) => {
+              Object.assign(record, schema.parse(record));
+            });
+        await transaction
+          .table("settings")
+          .toCollection()
+          .modify((record) => {
+            Object.assign(record, settingsSchema.parse(record));
+          });
+      });
   }
 }
 export const db = new WarmDatabase();

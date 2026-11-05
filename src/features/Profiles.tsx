@@ -15,9 +15,24 @@ import {
   Badge,
 } from "../components/ui";
 import { db, saveRecord, softDelete, restoreRecord } from "../storage/db";
-import { newEntity, type Profile } from "../domain";
+import { newEntity, profileSchema, type Profile } from "../domain";
 export function ProfilesPage() {
-  const { profiles } = useData();
+  const { profiles, archivedProfiles } = useData();
+  const [search, setSearch] = useState("");
+  const [relation, setRelation] = useState("all");
+  const [showArchived, setShowArchived] = useState(false);
+  const { run } = useAction();
+  const notice = useNotice();
+  const source = showArchived ? archivedProfiles : profiles;
+  const visible = source.filter(
+    (profile) =>
+      (relation === "all" || profile.relation === relation) &&
+      (!search ||
+        profile.name.includes(search) ||
+        profile.city.includes(search) ||
+        profile.likes.includes(search) ||
+        profile.tags.some((tag) => tag.includes(search))),
+  );
   return (
     <>
       <PageTitle
@@ -31,9 +46,38 @@ export function ProfilesPage() {
           </Link>
         }
       />
-      {profiles.length ? (
+      <div className="record-toolbar">
+        <label className="search-input">
+          <input
+            type="search"
+            aria-label="搜索 TA"
+            placeholder="搜索称呼、城市或标签"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
+        <select
+          aria-label="按关系筛选"
+          value={relation}
+          onChange={(event) => setRelation(event.target.value)}
+        >
+          <option value="all">全部关系</option>
+          {["朋友", "伴侣", "家人", "同事", "自己", "其他"].map((value) => (
+            <option key={value}>{value}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className={`button ${showArchived ? "secondary" : "ghost"}`}
+          aria-pressed={showArchived}
+          onClick={() => setShowArchived((value) => !value)}
+        >
+          已归档 {archivedProfiles.length}
+        </button>
+      </div>
+      {visible.length ? (
         <div className="profile-grid">
-          {profiles.map((p, i) => (
+          {visible.map((p, i) => (
             <article className="profile-card" key={p.id}>
               <Link to={`/profiles/${p.id}`} className="profile-main">
                 <div className={`avatar avatar-${i % 4}`}>
@@ -48,16 +92,41 @@ export function ProfilesPage() {
                 <div className="profile-preferences">
                   {p.likes || "还可以多记住一点 TA 的喜好。"}
                 </div>
+                {p.tags.length > 0 && (
+                  <div className="profile-tags">
+                    {p.tags.slice(0, 4).map((tag) => (
+                      <Badge key={tag}>{tag}</Badge>
+                    ))}
+                  </div>
+                )}
               </Link>
-              <Link to={`/gifts?profile=${p.id}`} className="button secondary">
-                <Sparkles size={16} />为 TA 选礼
-              </Link>
+              <div className="profile-actions">
+                <Link to={`/gifts?profile=${p.id}`} className="button secondary">
+                  <Sparkles size={16} />为 TA 选礼
+                </Link>
+                <button
+                  className="button ghost"
+                  onClick={() =>
+                    void run(async () => {
+                      await saveRecord("profiles", {
+                        ...p,
+                        archivedAt: showArchived ? null : Date.now(),
+                      });
+                      notice({
+                        text: showArchived ? "档案已恢复" : "档案已归档，可随时恢复",
+                      });
+                    })
+                  }
+                >
+                  {showArchived ? "恢复" : "归档"}
+                </button>
+              </div>
             </article>
           ))}
         </div>
       ) : (
         <Empty
-          title="先记住一个重要的人"
+          title={showArchived ? "归档是空的" : search ? "没有匹配的人" : "先记住一个重要的人"}
           action={
             <Link to="/profiles/new" className="button primary">
               <Plus size={16} />
@@ -65,7 +134,9 @@ export function ProfilesPage() {
             </Link>
           }
         >
-          喜欢的甜度、常去的城市、需要避开的食物，都值得被认真记住。
+          {showArchived
+            ? "归档不会删除地图、心意或胶囊，也不会把它们上传。"
+            : "喜欢的甜度、常去的城市、需要避开的食物，都值得被认真记住。"}
         </Empty>
       )}
     </>
@@ -80,19 +151,14 @@ export function ProfileForm() {
     () => (id ? db.profiles.get(id) : undefined),
     [id],
   );
-  const { maps } = useData();
-  const [form, setForm] = useState<Profile>(() => ({
-    ...newEntity(),
-    name: "",
-    relation: "朋友",
-    city: "",
-    likes: "",
-    allergies: "",
-    health: "",
-    diet: "",
-    note: "",
-    anniversaries: [],
-  }));
+  const { maps, orders, recommendations, capsules } = useData();
+  const [form, setForm] = useState<Profile>(() => {
+    const profile = profileSchema.parse({
+      ...newEntity(),
+      name: "新的 TA",
+    });
+    return { ...profile, name: "" };
+  });
   const [confirm, setConfirm] = useState(false);
   useEffect(() => {
     if (existing) setForm(existing);
@@ -172,6 +238,54 @@ export function ProfileForm() {
               onChange={(e) => set("likes", e.target.value)}
             />
           </Field>
+          <Field label="预算偏好">
+            <div className="inline-range">
+              <input
+                type="number"
+                min={0}
+                aria-label="最低预算"
+                value={form.budgetMin || ""}
+                onChange={(event) =>
+                  set("budgetMin", Number(event.target.value) || 0)
+                }
+                placeholder="最低"
+              />
+              <span>至</span>
+              <input
+                type="number"
+                min={0}
+                aria-label="最高预算"
+                value={form.budgetMax || ""}
+                onChange={(event) =>
+                  set("budgetMax", Number(event.target.value) || 0)
+                }
+                placeholder="最高"
+              />
+            </div>
+          </Field>
+        </div>
+        <Field label="标签（用逗号分开）">
+          <input
+            value={form.tags.join("，")}
+            onChange={(event) =>
+              set(
+                "tags",
+                event.target.value
+                  .split(/[,，]/)
+                  .map((value) => value.trim())
+                  .filter(Boolean)
+                  .slice(0, 20),
+              )
+            }
+            placeholder="例如：桂花、手写、周末散步"
+          />
+        </Field>
+        <details className="sensitive-details">
+          <summary>敏感偏好与备注</summary>
+          <p className="muted">
+            默认保存在本机。只有你在任务中明确选择时，才会向已配置的 AI 服务发送。
+          </p>
+          <div className="form-grid">
           <Field label="过敏与忌口">
             <input
               value={form.allergies}
@@ -196,16 +310,17 @@ export function ProfileForm() {
               onChange={(e) => set("health", e.target.value)}
             />
           </Field>
-        </div>
-        <Field label="私人的小备注">
-          <textarea
-            rows={3}
-            value={form.note}
-            maxLength={5000}
-            onChange={(e) => set("note", e.target.value)}
-            placeholder="那些想记住的小事…"
-          />
-        </Field>
+          </div>
+          <Field label="私人的小备注">
+            <textarea
+              rows={3}
+              value={form.note}
+              maxLength={5000}
+              onChange={(e) => set("note", e.target.value)}
+              placeholder="那些想记住的小事…"
+            />
+          </Field>
+        </details>
         <div className="section-heading compact">
           <h3>值得记住的日子</h3>
           <button
@@ -274,21 +389,58 @@ export function ProfileForm() {
         </div>
       </Form>
       {id && (
-        <section className="section-heading">
-          <div>
-            <h2>与 TA 有关的暖迹</h2>
-            <div className="inline-links">
-              {maps
-                .filter((m) => m.profileId === id)
-                .map((m) => (
-                  <Link key={m.id} to={`/maps/${m.id}`}>
-                    {m.title}
-                  </Link>
-                ))}
-              <Link to={`/maps/new?profile=${id}`}>
-                <Plus size={15} />
-                创建关联地图
-              </Link>
+        <section className="profile-connected">
+          <h2>和 TA 有关的记录</h2>
+          <div className="profile-connected-grid">
+            <div>
+              <h3>暖迹地图</h3>
+              <div className="inline-links">
+                {maps
+                  .filter((m) => m.profileId === id)
+                  .map((m) => (
+                    <Link key={m.id} to={`/maps/${m.id}`}>
+                      {m.title}
+                    </Link>
+                  ))}
+                <Link to={`/maps/new?profile=${id}`}>
+                  <Plus size={15} />
+                  创建关联地图
+                </Link>
+              </div>
+            </div>
+            <div>
+              <h3>心意计划</h3>
+              <div className="inline-links">
+                {orders
+                  .filter((order) => order.profileId === id)
+                  .slice(0, 5)
+                  .map((order) => (
+                    <Link key={order.id} to={`/orders/${order.id}`}>
+                      {order.title}
+                    </Link>
+                  ))}
+                <Link to="/orders/new">
+                  <Plus size={15} />
+                  记录一份心意
+                </Link>
+              </div>
+            </div>
+            <div>
+              <h3>最近灵感</h3>
+              <div className="inline-links">
+                {recommendations
+                  .filter((recommendation) => recommendation.profileId === id)
+                  .slice(0, 3)
+                  .map((recommendation) => (
+                    <Link key={recommendation.id} to="/history">
+                      {recommendation.result.summary.slice(0, 28)}
+                    </Link>
+                  ))}
+              </div>
+            </div>
+            <div>
+              <h3>时间胶囊</h3>
+              <p>{capsules.filter((capsule) => capsule.mapId && maps.some((map) => map.id === capsule.mapId && map.profileId === id)).length} 个关联胶囊</p>
             </div>
           </div>
         </section>

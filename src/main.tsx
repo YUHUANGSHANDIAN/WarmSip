@@ -1,9 +1,18 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { Capacitor } from "@capacitor/core";
 import { HashRouter } from "react-router-dom";
 import { App } from "./app/App";
 import { NoticeProvider } from "./components/ui";
 import "./styles.css";
+
+const nativeApp =
+  Boolean(window.__TAURI_INTERNALS__) || Capacitor.isNativePlatform();
+if (!nativeApp) {
+  void import("virtual:pwa-register").then(({ registerSW }) => {
+    registerSW({ immediate: true });
+  });
+}
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { failed: boolean }
@@ -11,6 +20,9 @@ class ErrorBoundary extends React.Component<
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("WarmSip fatal error", error, info);
   }
   render() {
     return this.state.failed ? (

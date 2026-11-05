@@ -26,6 +26,7 @@ android/app/src/main/assets/capacitor.config.json
 android/app/src/main/assets/capacitor.plugins.json
 android/capacitor-cordova-android-plugins/
 artifacts/
+data/
 SHA256SUMS
 harmony/.hvigor/
 harmony/oh_modules/

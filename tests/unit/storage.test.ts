@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, it, expect } from "vitest";
 import { zipSync, strToU8 } from "fflate";
+import Dexie from "dexie";
 import {
   WarmDatabase,
   saveRecord,
@@ -53,6 +54,49 @@ async function fixture() {
   return { profile, map, place };
 }
 describe("transactional local storage", () => {
+  it("migrates a version 1 database in place without losing the profile", async () => {
+    const name = `migration-${crypto.randomUUID()}`;
+    const old = new Dexie(name);
+    old.version(1).stores({
+      profiles: "id,updatedAt",
+      maps: "id,updatedAt,lastViewedAt",
+      places: "id,mapId,status,updatedAt",
+      recommendations: "id,createdAt,profileId",
+      orders: "id,updatedAt",
+      capsules: "id,openDate",
+      media: "id",
+      settings: "id",
+    });
+    await old.open();
+    await old.table("profiles").add({
+      id: "legacy-profile",
+      name: "旧档案",
+      city: "杭州",
+      relation: "朋友",
+      likes: "",
+      allergies: "",
+      health: "",
+      diet: "",
+      note: "",
+      anniversaries: [],
+      createdAt: 1,
+      updatedAt: 2,
+      deletedAt: null,
+    });
+    old.close();
+    const migrated = new WarmDatabase(name);
+    try {
+      const profile = await migrated.profiles.get("legacy-profile");
+      expect(profile).toMatchObject({
+        name: "旧档案",
+        archivedAt: null,
+        tags: [],
+        budgetMin: 0,
+      });
+    } finally {
+      await migrated.delete();
+    }
+  });
   it("preserves two independent maps through edit, delete and restore", async () => {
     const a = await fixture();
     const b = await fixture();

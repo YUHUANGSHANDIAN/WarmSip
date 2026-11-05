@@ -6,7 +6,16 @@ export function useData() {
   const profiles = useLiveQuery(
     () =>
       db.profiles
-        .filter((x) => x.deletedAt === null)
+        .filter((x) => x.deletedAt === null && x.archivedAt === null)
+        .reverse()
+        .sortBy("updatedAt"),
+    [],
+    [],
+  );
+  const archivedProfiles = useLiveQuery(
+    () =>
+      db.profiles
+        .filter((x) => x.deletedAt === null && x.archivedAt !== null)
         .reverse()
         .sortBy("updatedAt"),
     [],
@@ -49,7 +58,15 @@ export function useData() {
     [],
     [],
   );
-  return { profiles, maps, places, recommendations, orders, capsules };
+  return {
+    profiles,
+    archivedProfiles,
+    maps,
+    places,
+    recommendations,
+    orders,
+    capsules,
+  };
 }
 export function useSettings() {
   const settings = useLiveQuery(

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0-beta.1";
 const text = z.string().trim();
 const timestamp = z.number().int().nonnegative();
 export const dateOnly = z.string().refine((s) => {
@@ -31,6 +31,11 @@ export const profileSchema = z.object({
   health: text.max(1000).default(""),
   diet: text.max(1000).default(""),
   note: text.max(5000).default(""),
+  avatarId: z.string().default(""),
+  tags: z.array(text.max(40)).max(20).default([]),
+  budgetMin: z.number().finite().min(0).max(1000000).default(0),
+  budgetMax: z.number().finite().min(0).max(1000000).default(0),
+  archivedAt: timestamp.nullable().default(null),
   anniversaries: z
     .array(z.object({ name: text.min(1).max(100), date: dateOnly }))
     .max(50)
@@ -101,6 +106,12 @@ export const recommendationSchema = z.object({
   budget: z.number().finite().min(0).max(100000).default(50),
   kind: z.enum(["normal", "box"]).default("normal"),
   source: z.enum(["local", "ai", "legacy"]).default("local"),
+  taskId: z.string().default("gift"),
+  providerId: z.string().default(""),
+  modelId: z.string().default(""),
+  modelVersion: z.string().default(""),
+  promptVersion: z.string().default(""),
+  generatedAt: timestamp.default(0),
   result: recommendationResultSchema,
 });
 export const placeSnapshotSchema = z.object({
@@ -117,12 +128,40 @@ export const orderSchema = z.object({
   items: z.array(giftItemSchema).max(20).default([]),
   budget: z.number().finite().min(0).max(1000000).default(0),
   expectDate: optionalDate,
-  status: z.enum(["pending", "completed"]).default("pending"),
+  status: z
+    .enum([
+      "draft",
+      "planned",
+      "pending",
+      "preparing",
+      "ready",
+      "gifted",
+      "completed",
+    ])
+    .default("planned"),
+  source: z
+    .enum(["manual", "gift", "map", "capsule", "legacy"])
+    .default("manual"),
+  reminderAt: z.string().default(""),
+  recommendationId: z.string().default(""),
+  capsuleId: z.string().default(""),
   note: text.max(10000).default(""),
   blessing: text.max(2000).default(""),
   placeId: z.string().default(""),
   placeSnapshot: placeSnapshotSchema.nullable().default(null),
 });
+export const orderStatusLabels: Record<
+  z.infer<typeof orderSchema>["status"],
+  string
+> = {
+  draft: "草稿",
+  planned: "待准备",
+  pending: "待准备",
+  preparing: "准备中",
+  ready: "已准备",
+  gifted: "已送出",
+  completed: "已完成",
+};
 export const capsuleSchema = z.object({
   ...base,
   title: text.min(1).max(200),
@@ -141,6 +180,7 @@ export const capsuleSchema = z.object({
   mapId: z.string().default(""),
   placeId: z.string().default(""),
   placeSnapshot: placeSnapshotSchema.nullable().default(null),
+  photoIds: z.array(z.string()).max(4).default([]),
 });
 export const settingsSchema = z.object({
   id: z.literal("app").default("app"),
@@ -148,6 +188,14 @@ export const settingsSchema = z.object({
   theme: z.enum(["light", "dark", "system"]).default("system"),
   serviceUrl: z.string().default(""),
   timeZone: z.string().default("Asia/Shanghai"),
+  language: z.enum(["zh-CN"]).default("zh-CN"),
+  reduceMotion: z.boolean().default(false),
+  aiEnabled: z.boolean().default(false),
+  aiSendLikes: z.boolean().default(false),
+  aiSendSensitive: z.boolean().default(false),
+  aiSendPhotos: z.boolean().default(false),
+  aiBudgetDailyUsd: z.number().finite().min(0).max(10000).default(0),
+  aiBudgetMonthlyUsd: z.number().finite().min(0).max(100000).default(0),
 });
 export type Profile = z.infer<typeof profileSchema>;
 export type MapCollection = z.infer<typeof mapSchema>;

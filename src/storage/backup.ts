@@ -33,7 +33,7 @@ const emptyRecords = (): Records => ({
 });
 const metaSchema = z.object({
   format: z.literal("warmsip-backup"),
-  version: z.literal(1),
+  version: z.union([z.literal(1), z.literal(2)]),
   createdAt: z.string(),
   records: z.record(z.string(), z.array(z.unknown())),
   settings: z
@@ -109,7 +109,7 @@ export async function exportBackup(
   files["manifest.json"] = strToU8(
     JSON.stringify({
       format: "warmsip-backup",
-      version: 1,
+      version: 2,
       createdAt: new Date().toISOString(),
       records,
       media: metadata,

@@ -19,17 +19,39 @@ import {
 import { Capacitor } from "@capacitor/core";
 import { useSettings } from "../components/data";
 import { HomePage } from "../features/Home";
-import { ProfilesPage, ProfileForm } from "../features/Profiles";
-import { GiftPage, HistoryPage } from "../features/Gifts";
-import {
-  OrdersPage,
-  OrderForm,
-  CapsulesPage,
-  CapsuleForm,
-  CapsuleDetail,
-  CityPage,
-} from "../features/Records";
-import { SettingsPage } from "../features/Settings";
+const ProfilesPage = lazy(() =>
+  import("../features/Profiles").then((m) => ({ default: m.ProfilesPage })),
+);
+const ProfileForm = lazy(() =>
+  import("../features/Profiles").then((m) => ({ default: m.ProfileForm })),
+);
+const GiftPage = lazy(() =>
+  import("../features/Gifts").then((m) => ({ default: m.GiftPage })),
+);
+const HistoryPage = lazy(() =>
+  import("../features/Gifts").then((m) => ({ default: m.HistoryPage })),
+);
+const OrdersPage = lazy(() =>
+  import("../features/Records").then((m) => ({ default: m.OrdersPage })),
+);
+const OrderForm = lazy(() =>
+  import("../features/Records").then((m) => ({ default: m.OrderForm })),
+);
+const CapsulesPage = lazy(() =>
+  import("../features/Records").then((m) => ({ default: m.CapsulesPage })),
+);
+const CapsuleForm = lazy(() =>
+  import("../features/Records").then((m) => ({ default: m.CapsuleForm })),
+);
+const CapsuleDetail = lazy(() =>
+  import("../features/Records").then((m) => ({ default: m.CapsuleDetail })),
+);
+const CityPage = lazy(() =>
+  import("../features/Records").then((m) => ({ default: m.CityPage })),
+);
+const SettingsPage = lazy(() =>
+  import("../features/Settings").then((m) => ({ default: m.SettingsPage })),
+);
 const MapsPage = lazy(() =>
   import("../features/Maps").then((m) => ({ default: m.MapsPage })),
 );
@@ -83,6 +105,11 @@ export function App() {
   useEffect(() => {
     document.querySelector<HTMLElement>("main")?.focus({ preventScroll: true });
   }, [location.pathname]);
+  useEffect(() => {
+    document.documentElement.dataset.motion = settings.reduceMotion
+      ? "reduced"
+      : "full";
+  }, [settings.reduceMotion]);
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     let dispose: (() => void) | undefined;
@@ -170,7 +197,7 @@ export function App() {
           <NavLink to="/settings" className="privacy-link">
             你的记录，留在你的设备里 <ArrowUpRight size={15} />
           </NavLink>
-          <small>WarmSip · 0.1.0 预发布版</small>
+          <small>WarmSip · 0.2.0-beta.1 预发布版</small>
         </div>
       </aside>
       <div className="content-shell">
