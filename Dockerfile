@@ -12,6 +12,7 @@ WORKDIR /app
 COPY --from=build /app/dist-server ./dist-server
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache verify
+RUN mkdir -p /app/data && chown -R node:node /app/data
 USER node
 EXPOSE 8787
 CMD ["node","dist-server/server/index.js"]

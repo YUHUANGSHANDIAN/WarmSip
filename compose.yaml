@@ -7,8 +7,14 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 8787
+      AI_DATA_FILE: /app/data/ai-store.json
+    volumes:
+      - warmsip-data:/app/data
     restart: unless-stopped
     read_only: true
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
+
+volumes:
+  warmsip-data:

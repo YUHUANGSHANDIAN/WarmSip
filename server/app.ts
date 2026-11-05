@@ -2,6 +2,7 @@ import Fastify, { type FastifyRequest, type FastifyReply } from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { resolve } from "node:path";
 import { z } from "zod";
 import {
   recommendationRequestSchema,
@@ -9,6 +10,10 @@ import {
   poiSchema,
   type Poi,
 } from "../shared/domain.js";
+import { VERSION } from "../shared/domain.js";
+import { aiConnectionInputSchema } from "../shared/ai.js";
+import { AIService } from "./ai/service.js";
+import { AIStoreError } from "./ai/store.js";
 
 export interface ServerConfig {
   host: string;
@@ -20,6 +25,10 @@ export interface ServerConfig {
   aiBase: string;
   aiKey: string;
   aiModel: string;
+  aiDataFile?: string;
+  aiEncryptionKey?: string;
+  allowLocalAIEndpoints?: boolean;
+  allowedLocalAIEndpoints?: string[];
 }
 export function configFromEnv(): ServerConfig {
   return {
@@ -37,6 +46,15 @@ export function configFromEnv(): ServerConfig {
     aiBase: process.env.AI_BASE_URL || "",
     aiKey: process.env.AI_API_KEY || "",
     aiModel: process.env.AI_MODEL || "",
+    aiDataFile:
+      process.env.AI_DATA_FILE ||
+      resolve(process.env.AI_DATA_DIR || "data", "ai-store.json"),
+    aiEncryptionKey: process.env.AI_CREDENTIAL_ENCRYPTION_KEY || "",
+    allowLocalAIEndpoints: process.env.ALLOW_LOCAL_AI_ENDPOINTS === "true",
+    allowedLocalAIEndpoints: (process.env.AI_ALLOWED_LOCAL_ENDPOINTS || "")
+      .split(",")
+      .map((value) => value.trim().replace(/\/$/, ""))
+      .filter(Boolean),
   };
 }
 const same = (a: string, b: string) => {
@@ -120,7 +138,16 @@ export function createServer(
     throw new Error("监听网络接口时必须配置至少 24 字符的访问令牌");
   if (config.aiBase && new URL(config.aiBase).protocol !== "https:")
     throw new Error("AI 上游必须使用 HTTPS");
+  if (config.aiEncryptionKey && !config.token)
+    throw new Error("启用 AI 凭证管理时必须配置服务访问令牌");
   const app = Fastify({ logger: false, bodyLimit: 32768, trustProxy: false });
+  const ai = new AIService({
+    dataFile:
+      config.aiDataFile || resolve(process.cwd(), "data", "ai-store.json"),
+    encryptionSecret: config.aiEncryptionKey || "",
+    allowLocalEndpoints: Boolean(config.allowLocalAIEndpoints),
+    allowedLocalEndpoints: config.allowedLocalAIEndpoints || [],
+  });
   const ticketSecret =
     config.token || config.amapSecurityCode || "local-unconfigured";
   const sign = (expires: string) =>
@@ -135,6 +162,7 @@ export function createServer(
   app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
   app.addHook("onRequest", async (req, reply) => {
     if (req.method === "OPTIONS") return;
+    if (req.url === "/healthz") return;
     const origin = req.headers.origin;
     if (origin && !config.origins.includes(origin))
       return reply
@@ -172,6 +200,11 @@ export function createServer(
       message: "上游服务暂不可用，请稍后重试",
     });
   });
+  app.get("/healthz", async () => ({
+    ok: true,
+    version: VERSION,
+    timestamp: new Date().toISOString(),
+  }));
   const upstream = async (
     url: URL | string,
     signal: AbortSignal,
@@ -236,14 +269,117 @@ export function createServer(
   app.get("/api/v1/capabilities", async () => {
     const expires = String(Date.now() + 2 * 60 * 60 * 1000);
     const map = Boolean(config.amapJsKey && config.amapSecurityCode);
+    const aiState = await ai.state();
     return {
-      ai: Boolean(config.aiBase && config.aiKey && config.aiModel),
+      ai: aiState.available,
       places: Boolean(config.amapKey),
       weather: Boolean(config.amapKey),
       map,
       mapJsKey: map ? config.amapJsKey : "",
       mapProxyUrl: map ? `/api/v1/map-proxy/${expires}.${sign(expires)}` : "",
     };
+  });
+  app.get("/api/v1/ai/state", bounded(async () => ai.state()));
+  app.post(
+    "/api/v1/ai/connections",
+    bounded(async (req) => {
+      const input = aiConnectionInputSchema.parse(req.body);
+      const connection = await ai.saveConnection(input);
+      return { connection };
+    }),
+  );
+  app.post(
+    "/api/v1/ai/connections/:id/test",
+    bounded(async (req) => {
+      const { id } = z.object({ id: z.string().min(1).max(120) }).parse(req.params);
+      return ai.testConnection(id);
+    }),
+  );
+  app.post(
+    "/api/v1/ai/connections/:id/refresh-models",
+    bounded(async (req) => {
+      const { id } = z.object({ id: z.string().min(1).max(120) }).parse(req.params);
+      return ai.refreshModels(id);
+    }),
+  );
+  app.delete(
+    "/api/v1/ai/connections/:id",
+    bounded(async (req) => {
+      const { id } = z.object({ id: z.string().min(1).max(120) }).parse(req.params);
+      await ai.removeConnection(id);
+      return { removed: true };
+    }),
+  );
+  app.put(
+    "/api/v1/ai/task-routes",
+    bounded(async (req) => ({ routes: await ai.setRoutes(req.body) })),
+  );
+  app.delete(
+    "/api/v1/ai/usage",
+    bounded(async () => {
+      await ai.clearUsage();
+      return { cleared: true };
+    }),
+  );
+  app.delete(
+    "/api/v1/ai/state",
+    bounded(async () => {
+      await ai.clearAll();
+      return { cleared: true };
+    }),
+  );
+  app.post(
+    "/api/v1/ai/oauth/openrouter/start",
+    bounded(async () => ai.startOpenRouterOAuth()),
+  );
+  app.get(
+    "/api/v1/ai/oauth/:flowId",
+    bounded(async (req) => {
+      const { flowId } = z
+        .object({ flowId: z.string().uuid() })
+        .parse(req.params);
+      return ai.openRouterOAuthStatus(flowId);
+    }),
+  );
+  app.post("/api/v1/ai/stream", async (req, reply) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 90000);
+    const abort = () => controller.abort();
+    req.raw.once("aborted", abort);
+    reply.raw.once("close", abort);
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    reply.hijack();
+    const send = (event: unknown) =>
+      reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+    try {
+      for await (const event of ai.stream(req.body, controller.signal)) {
+        if (reply.raw.destroyed) {
+          controller.abort();
+          break;
+        }
+        send(event);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "AI 服务暂不可用";
+      send({
+        type: "error",
+        code:
+          error instanceof AIStoreError ? error.code : "AI_REQUEST_FAILED",
+        message: message.slice(0, 240),
+      });
+      send({ type: "done" });
+    } finally {
+      clearTimeout(timer);
+      req.raw.off("aborted", abort);
+      reply.raw.off("close", abort);
+      if (!reply.raw.writableEnded) reply.raw.end();
+    }
   });
   app.get(
     "/api/v1/places/search",
