@@ -2,13 +2,13 @@
 
 ![WarmSip 原创品牌](assets/brand/exports/readme-banner.png)
 
-WarmSip 0.1.0 是无需注册的本地关怀记录应用：保存收礼人档案、选礼灵感、心意清单和时间胶囊，在「暖迹地图」中留下想去、去过、想送与已送的地点。记录与照片保存在本机；AI、高德地点、底图与天气需要自行配置服务端。
+WarmSip 0.2.0-beta.1 是无需注册的本地关怀记录应用：保存收礼人档案、选礼灵感、心意清单和时间胶囊，在「暖迹地图」中留下想去、去过、想送与已送的地点。记录与照片保存在本机；AI、高德地点、底图与天气通过可配置的 Fastify 服务连接。
 
-**预发布状态：** 本地业务可用；真实在线服务尚未联调。各系统的编译、签名、安装和核心功能验证分开记录，详见 [验收记录](docs/VALIDATION.md)。HarmonyOS 暂无可安装 HAP。私有仓库的源码及 Release 下载均需要仓库权限。
+**预发布状态：** 本地业务、暖纸手帐设计系统、pi AI 1.5.0 多模型服务、流式选礼、文案、地图灵感、城市导览和足迹故事均已实现。缺少生产凭证时，真实在线服务仍会明确显示“未联调”。HarmonyOS 暂无可安装 HAP。
 
-[预发布下载](https://github.com/YUHUANGSHANDIAN/WarmSip/releases/tag/v0.1.0) · [CI](https://github.com/YUHUANGSHANDIAN/WarmSip/actions) · [变更记录](docs/CHANGELOG.md) · [构建发布](docs/RELEASE.md)
+[预发布下载](https://github.com/YUHUANGSHANDIAN/WarmSip/releases/tag/v0.2.0-beta.1) · [CI](https://github.com/YUHUANGSHANDIAN/WarmSip/actions) · [变更记录](docs/CHANGELOG.md) · [构建发布](docs/RELEASE.md)
 
-[桌面首页截图](docs/screenshots/home-desktop.png) · [移动深色主题](docs/screenshots/home-mobile-dark.png) · [移动暖迹地图](docs/screenshots/map-mobile.png) · [Android 原生验收](docs/screenshots/android-native.png)
+[桌面首页](docs/screenshots/home-desktop.png) · [移动深色主题](docs/screenshots/home-mobile-dark.png) · [移动暖迹地图](docs/screenshots/map-mobile.png) · [AI 连接中心](docs/screenshots/ai-settings-mobile.png) · [0.1.0 Android 原生验收](docs/screenshots/android-native.png)
 
 ## 在本地运行
 
@@ -33,9 +33,11 @@ npm run test:e2e
 
 ## 在线服务
 
-将 `.env.example` 复制为 `.env`，填写访问令牌、允许的客户端来源及需要启用的提供方配置，然后运行 `npm run server:dev`。也可使用 `docker compose up -d --build`，通过 HTTPS 反向代理访问 `127.0.0.1:8787`。服务端监听网络接口时要求至少 24 字符的访问令牌。
+将 `.env.example` 复制为 `.env`，至少生成随机 `SERVICE_ACCESS_TOKEN` 和 `AI_CREDENTIAL_ENCRYPTION_KEY`，然后运行 `npm run server:dev`。也可使用 `docker compose up -d --build`，通过 HTTPS 反向代理访问 `127.0.0.1:8787`。Docker 使用持久卷保存加密 AI 配置。
 
-在应用「我的 → 在线服务」填写 HTTPS 服务地址和访问令牌，点击连接检查。访问令牌仅保留在当前会话，重启后需重新填写；上游 AI/高德密钥只放服务端。AI 建议中的商家信息不能代替 POI；真实地点从高德服务查询，不编造价格、评分或营业状态。
+在应用「我的 → 在线服务」填写 HTTPS 服务地址和访问令牌，点击连接检查，再进入「AI 模型与连接」添加 OpenAI、Anthropic、Google、DeepSeek、OpenRouter、Moonshot、MiniMax 或 OpenAI-compatible 模型。OpenRouter 支持官方 OAuth；其他 OAuth 入口本版不提供。
+
+模型密钥只保存在受令牌保护的单租户服务中，不写入浏览器、IndexedDB、备份或客户端包。服务只能单实例运行，不支持多用户隔离或匿名公网代理。每个任务显式选择模型，失败不会静默跨供应商重试。真实地点必须来自高德 POI，AI 只生成建议和经过校验的查询条件。
 
 ## 数据与隐私
 
@@ -43,6 +45,8 @@ npm run test:e2e
 - 分享先预览，默认排除照片、精确坐标、私人备注和收礼人。完整 ZIP 备份包含私人数据，请妥善保管。
 - ZIP 导入先校验和预览，再通过事务提交；旧版五个 `lg_warm_*_v1` 键的 JSON 导入见 [迁移说明](docs/MIGRATION.md)。
 - 时间胶囊按指定 IANA 时区的开启日零点开放。它是本地纪念功能，不提供防篡改加密锁定。
+- 过敏、忌口、私人备注和照片分别授权；每次 AI 任务发送前显示字段范围、模型与费用边界。
+- AI 用量只保存任务、模型、Token、费用来源和状态，不保存原始提示词或生成正文。
 - 本轮不包含支付、配送、公开社交、云同步、多人协作或 iOS。
 
 ## 平台与工程
@@ -58,6 +62,6 @@ npm run test:e2e
 
 `src/` 为 React 业务、`shared/` 为领域校验、`server/` 为 Fastify 服务、`src-tauri/` 与 `android/` 为原生工程。参考附件保留在开发目录并从版本控制排除；源码和杯子/爱心蒸汽/定位品牌均重新编写绘制。
 
-[地图技术说明](docs/MAP_TECHNICAL.md) · [品牌规范](docs/BRAND.md) · [HarmonyOS 阻塞与接入](harmony/README.md)
+[AI 架构与安全](docs/AI.md) · [地图技术说明](docs/MAP_TECHNICAL.md) · [品牌规范](docs/BRAND.md) · [HarmonyOS 阻塞与接入](harmony/README.md)
 
 许可证：[MIT](LICENSE)。

@@ -26,6 +26,8 @@ jobs:
       - run: npm test -- --reporter=dot
       - run: npm run server:build
       - run: npm run build
+      - run: npm run check:bundle
+      - run: npm run audit:prod
 
   browser:
     runs-on: ubuntu-latest
@@ -49,3 +51,34 @@ jobs:
             playwright-report
             test-results
           if-no-files-found: ignore
+
+  container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build service image
+        run: docker build --pull -t warmsip-service:test .
+      - name: Start service with encrypted credential store
+        run: |
+          docker run --rm -d --name warmsip-ci \
+            -p 127.0.0.1:8787:8787 \
+            -e SERVICE_ACCESS_TOKEN=warmsip-ci-access-token-1234 \
+            -e AI_CREDENTIAL_ENCRYPTION_KEY=warmsip-ci-encryption-key-1234 \
+            -e ALLOWED_ORIGINS=http://localhost:1420 \
+            warmsip-service:test
+      - name: Verify health and authentication boundary
+        shell: bash
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8787/healthz; then break; fi
+            sleep 1
+          done
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            http://127.0.0.1:8787/api/v1/ai/state)" = "401"
+          curl --fail --silent \
+            -H 'Authorization: Bearer warmsip-ci-access-token-1234' \
+            http://127.0.0.1:8787/api/v1/ai/state > /dev/null
+      - if: always()
+        run: docker rm -f warmsip-ci
