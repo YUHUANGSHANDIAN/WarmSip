@@ -50,6 +50,7 @@ import { platform } from "../platform";
 import { services, setAccessToken, validateServiceUrl } from "../services/api";
 import { localDate } from "../services/time";
 import { type Settings, type Capabilities } from "../domain";
+import { AISettings } from "./AISettings";
 const tableLabels: Record<RecordTable, string> = {
   profiles: "收礼人档案",
   maps: "暖迹地图",
@@ -126,7 +127,7 @@ export function SettingsPage() {
             本地使用 · 无需账号 · 地图默认私人
           </p>
         </div>
-        <Badge tone="warm">0.1.0 预发布版</Badge>
+        <Badge tone="warm">0.2.0-beta.1 预发布版</Badge>
       </div>
       <div className="settings-shortcuts">
         <Link to="/profiles">
@@ -190,6 +191,88 @@ export function SettingsPage() {
               </button>
             ))}
           </div>
+        </div>
+        <div className="ai-privacy-grid">
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={form.reduceMotion}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, reduceMotion: e.target.checked }))
+              }
+            />
+            减少界面动效
+          </label>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={form.aiEnabled}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, aiEnabled: e.target.checked }))
+              }
+            />
+            允许使用已连接的 AI
+          </label>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={form.aiSendLikes}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, aiSendLikes: e.target.checked }))
+              }
+            />
+            任务需要时发送偏好标签
+          </label>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={form.aiSendSensitive}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, aiSendSensitive: e.target.checked }))
+              }
+            />
+            任务需要时发送过敏、忌口或私人备注
+          </label>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={form.aiSendPhotos}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, aiSendPhotos: e.target.checked }))
+              }
+            />
+            允许用户主动选择时发送照片
+          </label>
+        </div>
+        <div className="form-grid">
+          <Field label="AI 每日软预算（美元）" hint="0 表示不设应用内软预算。">
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={form.aiBudgetDailyUsd}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  aiBudgetDailyUsd: Number(e.target.value) || 0,
+                }))
+              }
+            />
+          </Field>
+          <Field label="AI 每月软预算（美元）">
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={form.aiBudgetMonthlyUsd}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  aiBudgetMonthlyUsd: Number(e.target.value) || 0,
+                }))
+              }
+            />
+          </Field>
         </div>
         <div className="section-heading">
           <h2>
@@ -261,6 +344,7 @@ export function SettingsPage() {
           </div>
         )}
       </Form>
+      <AISettings enabled={Boolean(capabilities)} />
       <section className="settings-card">
         <div className="section-heading">
           <h2>
@@ -488,6 +572,11 @@ export function SettingsPage() {
             disabled={busy || clearText !== "删除全部数据"}
             onClick={() => {
               void run(async () => {
+                if (capabilities) {
+                  await services.clearAIData().catch(() => {
+                    // Local deletion succeeds even when the optional service is offline.
+                  });
+                }
                 await clearPersonalData();
                 setAccessToken("");
                 setToken("");

@@ -7,14 +7,15 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "prompt",
+      injectRegister: null,
       includeAssets: ["favicon.svg", "brand/*.svg", "brand/*.png"],
       manifest: {
         name: "WarmSip · 给 TA 点一杯温暖",
         short_name: "WarmSip",
         lang: "zh-CN",
         description: "让每一份关心，都有温暖的落点。",
-        theme_color: "#FF6B57",
-        background_color: "#FFF7F2",
+        theme_color: "#A33726",
+        background_color: "#F8F3EB",
         display: "standalone",
         start_url: "./",
         scope: "./",
@@ -35,6 +36,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/api/],

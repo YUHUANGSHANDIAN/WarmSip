@@ -1,6 +1,6 @@
 {
   "name": "warmsip",
-  "version": "0.1.0",
+  "version": "0.2.0-beta.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -14,6 +14,8 @@
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
+    "check:bundle": "node scripts/check-bundle.mjs",
     "server:dev": "tsx server/index.ts",
     "server:build": "tsc -p tsconfig.server.json",
     "server:start": "node dist-server/server/index.js",
@@ -30,6 +32,7 @@
     "@capacitor/filesystem": "8.1.5",
     "@capacitor/geolocation": "8.2.4",
     "@capacitor/share": "8.0.3",
+    "@earendil-works/pi-ai": "1.5.0",
     "@fastify/cors": "11.4.0",
     "@fastify/rate-limit": "10.3.0",
     "@js-temporal/polyfill": "0.5.1",
