@@ -1,8 +1,38 @@
-# 0.1.0 验收记录
+# 0.2.0-beta.1 验收记录
 
 本记录区分实际执行、提供方模拟和未验证项。源码配置存在不等于相应平台已发布。
 
-## 已执行
+## 0.2.0-beta.1 当前轮
+
+2026-11-04—05 在现有 Windows 开发机完成：
+
+- ESLint、TypeScript、40 项 Vitest 和服务端构建通过。新增测试覆盖 Dexie 1→2 原位迁移、AES-GCM 凭证密文与篡改检测、本地端点允许列表、双 faux Provider 显式路由、无跨 Provider 回退和 AI 软预算。
+- 14 项 Playwright 运行通过，覆盖原有 6 个桌面/移动业务场景、明暗主题 WCAG 2.2 AA，以及 360/390/430/768/1280/1440/1920 七档宽度无横向溢出。实际截图已更新到 `docs/screenshots`。
+- 实际修复旧版自动化遗漏的 390px 与 768px 暖迹地图标题竖排、筛选控件挤压和底部导航遮挡问题。
+- Web/PWA 与客户端包构建通过；最大 JS chunk 为 673,290 bytes，低于 850 KB 门槛，pi AI SDK 未进入客户端产物。
+- `npm audit --omit=dev` 报告 0 个生产依赖漏洞。
+- 本地 Fastify 服务实际启动，`/healthz` 通过；未携带访问令牌的 `/api/v1/ai/state` 返回 401；带令牌读取单租户状态通过。
+- 通过应用界面保存一个 OpenAI 测试连接后，持久化文件只含版本化 AES-GCM 密文，搜索不到测试 Key 明文；测试结束已通过服务 API 清除该连接。
+- Windows Tauri NSIS 实际编译并静默升级安装到 `D:\WarmSip`。安装后的 EXE 产品版本为 `0.2.0-beta.1`；旧地图、照片和私人备注均恢复，保存成功，AI 设置页可见。
+- 升级测试发现旧 0.1.0 PWA Service Worker 会在 WebView2 中继续提供旧应用壳。已改为仅 Web/PWA 注册 Service Worker，并由 Windows 原生入口延迟注销旧注册、清理旧缓存和重载。复验时 `navigator.serviceWorker.controller` 为空、注册列表为空，页面加载 `0.2.0-beta.1`，用户 IndexedDB 数据保持不变。
+
+| 项目 | 状态 | 证据/边界 |
+| --- | --- | --- |
+| pi AI 1.5.0 服务端集成 | 已编译、模拟路由通过 | 双 faux Provider、选择模型真实路由、SSE 解析、取消与结构校验由代码和单测覆盖 |
+| 加密凭证与令牌 | 已执行 | 服务端密文、401、来源限制和 SSRF 防护测试通过 |
+| OpenRouter OAuth | 已实现入口，未联调 | 缺 OAuth 应用配置与用户授权，不能记为真实成功 |
+| 其他 AI 提供商 | 已配置适配器，未联调 | 缺实际 API Key；网络测试不能由 faux 替代 |
+| 高德底图/POI/天气 | 未联调 | 缺高德 JS/Web 服务凭证和允许来源配置 |
+| Docker | CI 门禁已配置，本机无 Docker | 由 Ubuntu CI 构建、启动并检查健康与 401 |
+| Windows | 已编译、已安装、核心流程已验证 | NSIS 未签名；待最终同一提交的 CI 标签包与 Release 下载复核 |
+| Linux/macOS/Android/Web 发行包 | 待最终标签 CI | 不将本地开发构建当作已上传 Release |
+| HarmonyOS HAP | 阻塞 | 本机仍无 DevEco、SDK、OHPM、Hvigor 与签名 |
+
+以下 0.1.0 记录保留为历史证据，不能用于宣称 0.2.0-beta.1 已完成同版本全平台上传。
+
+## 0.1.0 历史验收
+
+### 已执行
 
 2026-11-03，Windows 开发机、Chromium 桌面 1440×1000 / Pixel 7 移动视口：
 
