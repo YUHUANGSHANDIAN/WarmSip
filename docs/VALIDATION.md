@@ -1,12 +1,20 @@
-# 0.2.0-beta.1 验收记录
+# 0.2.0-beta.2 验收记录
 
 本记录区分实际执行、提供方模拟和未验证项。源码配置存在不等于相应平台已发布。
 
-## 0.2.0-beta.1 当前轮
+## 0.2.0-beta.2 当前轮
 
-2026-11-04—05 在现有 Windows 开发机完成：
+2026-11-06 在现有 Windows 开发机完成 Render Free 准备验证：
 
-- ESLint、TypeScript、40 项 Vitest 和服务端构建通过。新增测试覆盖 Dexie 1→2 原位迁移、AES-GCM 凭证密文与篡改检测、本地端点允许列表、双 faux Provider 显式路由、无跨 Provider 回退和 AI 软预算。
+- 44 项 Vitest、ESLint、TypeScript、Web/PWA 构建、Fastify 构建和生产依赖审计通过。
+- 新增健康探测测试：服务唤醒时先请求公开 `/healthz`，最终连接等待上限为 90 秒；503、超时和网络错误不会被误记为连接成功。
+- CORS 预检实测返回 204，允许 `GET, POST, PUT, PATCH, DELETE, OPTIONS`，同时仅返回精确来源白名单。
+- 使用 `HOST=0.0.0.0`、令牌、空 AI/地图/天气配置启动服务：`/healthz` 返回 `0.2.0-beta.2`，无令牌能力查询返回 401，鉴权能力查询返回 200 且四项在线能力均为 false。
+- Render 账号、Render Web Service 和公网 URL 尚未创建，因此不能将 Render 记为“已联调”。
+
+2026-11-04—05 在现有 Windows 开发机完成 0.2.0-beta.1 基线验证：
+
+- ESLint、TypeScript、当时 40 项 Vitest 和服务端构建通过。测试覆盖 Dexie 1→2 原位迁移、AES-GCM 凭证密文与篡改检测、本地端点允许列表、双 faux Provider 显式路由、无跨 Provider 回退和 AI 软预算。
 - 14 项 Playwright 运行通过，覆盖原有 6 个桌面/移动业务场景、明暗主题 WCAG 2.2 AA，以及 360/390/430/768/1280/1440/1920 七档宽度无横向溢出。实际截图已更新到 `docs/screenshots`。
 - 实际修复旧版自动化遗漏的 390px 与 768px 暖迹地图标题竖排、筛选控件挤压和底部导航遮挡问题。
 - Web/PWA 与客户端包构建通过；最大 JS chunk 为 673,290 bytes，低于 850 KB 门槛，pi AI SDK 未进入客户端产物。
@@ -28,7 +36,7 @@
 | Linux/macOS/Android/Web 发行包 | 待最终标签 CI | 不将本地开发构建当作已上传 Release |
 | HarmonyOS HAP | 阻塞 | 本机仍无 DevEco、SDK、OHPM、Hvigor 与签名 |
 
-以下 0.1.0 记录保留为历史证据，不能用于宣称 0.2.0-beta.1 已完成同版本全平台上传。
+以下 0.1.0 记录保留为历史证据，不能用于宣称 0.2.0-beta.2 已完成同版本全平台上传。
 
 ## 0.1.0 历史验收
 

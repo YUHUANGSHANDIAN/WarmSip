@@ -1,6 +1,6 @@
 # WarmSip AI 架构与安全
 
-WarmSip 0.2.0-beta.1 固定使用 MIT 许可的 `@earendil-works/pi-ai@1.5.0`。pi SDK 只在 Node/Fastify 服务中运行，不进入 Web/PWA 或原生 WebView 客户端包。服务提供统一模型目录、显式任务路由、流式生成、取消、Token 与费用报告和标准错误。
+WarmSip 0.2.0-beta.2 固定使用 MIT 许可的 `@earendil-works/pi-ai@1.5.0`。pi SDK 只在 Node/Fastify 服务中运行，不进入 Web/PWA 或原生 WebView 客户端包。服务提供统一模型目录、显式任务路由、流式生成、取消、Token 与费用报告和标准错误。
 
 ## 连接方式
 
@@ -17,7 +17,8 @@ pi 支持某种 OAuth Provider，不代表任意第三方应用获准复用该�
 
 ```sh
 cp .env.example .env
-# 在 .env 中设置随机 SERVICE_ACCESS_TOKEN 与 AI_CREDENTIAL_ENCRYPTION_KEY
+# 基础服务至少设置随机 SERVICE_ACCESS_TOKEN
+# 需要运行时多 Provider 凭证时再设置 AI_CREDENTIAL_ENCRYPTION_KEY
 npm run server:dev
 ```
 
@@ -28,6 +29,8 @@ npm run server:dev
 ## 安全边界
 
 服务是单实例、单可信管理域，不提供多用户账号隔离。持有服务访问令牌的人可以管理模型连接。公开部署前应使用随机长令牌、HTTPS、反向代理来源限制和独立加密密钥。
+
+Render Free 的容器文件系统是临时的。基础服务 URL 和 Render 环境变量可跨实例重启保留，但 `/app/data/ai-store.json` 中的模型连接、加密凭证和用量会随休眠重启或重新部署丢失。零付费基础部署暂不配置 `AI_CREDENTIAL_ENCRYPTION_KEY`；不要把临时磁盘当作持久凭证库。
 
 凭证以 AES-256-GCM 保存，每个 Provider 使用独立随机 nonce 和 Provider ID 作为 AAD。文件写入采用串行读改写、同步写入与原子替换。API 响应只返回尾号掩码；连接列表不解析为明文；错误、日志和备份不包含凭证。删除连接会同时移除该连接的密文和任务路由。
 

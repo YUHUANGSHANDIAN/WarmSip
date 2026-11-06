@@ -102,6 +102,26 @@ describe("service authorization and upstream boundaries", () => {
       await app.close();
     }
   });
+  it("allows the CORS methods used by AI connection management", async () => {
+    const app = createServer(config);
+    try {
+      const response = await app.inject({
+        method: "OPTIONS",
+        url: "/api/v1/ai/task-routes",
+        headers: {
+          origin: "http://localhost:1420",
+          "access-control-request-method": "PUT",
+        },
+      });
+      expect(response.statusCode).toBe(204);
+      expect(response.headers["access-control-allow-methods"]).toContain("PUT");
+      expect(response.headers["access-control-allow-methods"]).toContain(
+        "DELETE",
+      );
+    } finally {
+      await app.close();
+    }
+  });
   it("reports missing services honestly and does not return mock data", async () => {
     const upstream = vi.fn();
     const app = createServer(config, upstream);

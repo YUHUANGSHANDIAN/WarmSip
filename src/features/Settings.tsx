@@ -75,6 +75,7 @@ export function SettingsPage() {
   const { busy, run } = useAction();
   const notice = useNotice();
   const [storage, setStorage] = useState("");
+  const [connecting, setConnecting] = useState(false);
   const deleted = useLiveQuery(
     async () => {
       const result: { table: RecordTable; id: string; title: string }[] = [];
@@ -103,13 +104,14 @@ export function SettingsPage() {
       )
       .catch(() => {});
   }, []);
-  const save = async () => {
+  const save = async (announce = true) => {
     const serviceUrl = validateServiceUrl(form.serviceUrl);
     if (!Intl.DateTimeFormat("zh-CN", { timeZone: form.timeZone }))
       throw new Error("时区无效");
     await saveSettings({ ...form, serviceUrl });
     setAccessToken(token);
-    notice({ text: "设置已保存；服务访问令牌仅在本次会话内使用" });
+    if (announce)
+      notice({ text: "设置已保存；服务访问令牌仅在本次会话内使用" });
   };
   return (
     <>
@@ -127,7 +129,7 @@ export function SettingsPage() {
             本地使用 · 无需账号 · 地图默认私人
           </p>
         </div>
-        <Badge tone="warm">0.2.0-beta.1 预发布版</Badge>
+        <Badge tone="warm">0.2.0-beta.2 预发布版</Badge>
       </div>
       <div className="settings-shortcuts">
         <Link to="/profiles">
@@ -315,19 +317,32 @@ export function SettingsPage() {
           <button
             type="button"
             className="button secondary"
-            disabled={busy}
+            disabled={busy || connecting}
             onClick={() => {
               void run(async () => {
-                await save();
-                const capabilities = await services.capabilities();
-                setCapabilities(capabilities);
-                notice({ text: "已连接服务，能力状态如下" });
+                setConnecting(true);
+                try {
+                  await save(false);
+                  const next = await services.checkConnection();
+                  setCapabilities(next);
+                  notice({
+                    text: next.ai || next.places || next.weather || next.map
+                      ? "已连接服务，能力状态如下"
+                      : "基础服务已连接；外部能力尚未配置",
+                  });
+                } finally {
+                  setConnecting(false);
+                }
               });
             }}
           >
-            保存并检查连接
+            {connecting ? "正在唤醒免费服务…" : "保存并检查连接"}
           </button>
         </div>
+        <p className="small-note">
+          Render Free 实例休眠后，首次连接可能需要约一分钟唤醒；最多等待
+          90 秒。
+        </p>
         {capabilities && (
           <div className="capabilities">
             {[

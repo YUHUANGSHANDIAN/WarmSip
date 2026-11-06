@@ -87,6 +87,68 @@ export async function apiRequest(
     init.signal?.removeEventListener("abort", abort);
   }
 }
+export async function probeService(
+  baseUrl: string,
+  signal?: AbortSignal,
+  timeout = 90000,
+) {
+  const base = validateServiceUrl(baseUrl);
+  if (!base)
+    throw new ServiceError("请先填写在线服务地址", "NOT_CONFIGURED");
+  const controller = new AbortController();
+  const abort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) abort();
+  else signal?.addEventListener("abort", abort, { once: true });
+  const timer = setTimeout(
+    () =>
+      controller.abort(
+        new DOMException(
+          "免费服务可能正在唤醒，请约一分钟后重试",
+          "TimeoutError",
+        ),
+      ),
+    timeout,
+  );
+  try {
+    const response = await fetch(`${base}/healthz`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!response.ok)
+      throw new ServiceError(
+        response.status >= 500
+          ? "免费服务正在启动或暂不可用，请稍后重试"
+          : "服务健康检查失败",
+        `HEALTH_${response.status}`,
+      );
+    const data = (await response.json().catch(() => null)) as {
+      ok?: boolean;
+    } | null;
+    if (!data?.ok)
+      throw new ServiceError("服务返回了无效的健康检查结果", "INVALID_HEALTH");
+  } catch (error) {
+    if (controller.signal.aborted)
+      throw new ServiceError(
+        String(controller.signal.reason?.message || "服务唤醒超时"),
+        "WAKE_TIMEOUT",
+      );
+    if (error instanceof ServiceError) throw error;
+    if (
+      error instanceof DOMException &&
+      (error.name === "AbortError" || error.name === "TimeoutError")
+    )
+      throw error;
+    throw new ServiceError(
+      "无法连接在线服务，免费实例可能正在唤醒",
+      "NETWORK",
+    );
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", abort);
+  }
+}
 async function serviceContext() {
   const settings = await getSettings();
   const base = validateServiceUrl(settings.serviceUrl);
@@ -124,6 +186,14 @@ export interface WeatherProvider {
   ) => Promise<z.infer<typeof weatherSchema>>;
 }
 export const services = {
+  checkConnection: async (signal?: AbortSignal): Promise<Capabilities> => {
+    const settings = await getSettings();
+    const base = validateServiceUrl(settings.serviceUrl);
+    await probeService(base, signal);
+    return capabilitiesSchema.parse(
+      await apiRequest("/capabilities", { signal }, 30000),
+    );
+  },
   capabilities: async (signal?: AbortSignal): Promise<Capabilities> =>
     capabilitiesSchema.parse(await apiRequest("/capabilities", { signal })),
   recommend: async (input: RecommendationRequest, signal: AbortSignal) =>

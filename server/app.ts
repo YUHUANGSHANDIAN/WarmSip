@@ -155,7 +155,7 @@ export function createServer(
   app.register(cors, {
     origin: (origin, done) =>
       done(null, !origin || config.origins.includes(origin)),
-    methods: ["GET", "POST"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: false,
   });
