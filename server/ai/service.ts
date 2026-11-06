@@ -200,7 +200,7 @@ export class AIService {
       credentials: this.store,
       identity: {
         userAgent: "short",
-        version: "0.2.0-beta.1",
+        version: "0.2.0-beta.2",
         attribution: null,
       },
     });

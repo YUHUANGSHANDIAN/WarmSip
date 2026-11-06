@@ -197,7 +197,7 @@ export function App() {
           <NavLink to="/settings" className="privacy-link">
             你的记录，留在你的设备里 <ArrowUpRight size={15} />
           </NavLink>
-          <small>WarmSip · 0.2.0-beta.1 预发布版</small>
+          <small>WarmSip · 0.2.0-beta.2 预发布版</small>
         </div>
       </aside>
       <div className="content-shell">

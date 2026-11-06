@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   coordinateSchema,
   profileSchema,
@@ -10,7 +10,12 @@ import {
 import { canOpen, capsuleOpenInstant } from "../../src/services/time";
 import { resolveLocation, localInspiration } from "../../src/services/context";
 import { mapSummary, privateShareDefaults } from "../../src/services/sharing";
-import { LatestRequest, validateServiceUrl } from "../../src/services/api";
+import {
+  LatestRequest,
+  probeService,
+  ServiceError,
+  validateServiceUrl,
+} from "../../src/services/api";
 
 describe("dates, geography and privacy", () => {
   it("rejects impossible calendar dates and invalid coordinates", () => {
@@ -155,5 +160,65 @@ describe("request cancellation", () => {
     await rejection;
     expect(await latest.run(async () => "retry")).toBe("retry");
     finish("ignored");
+  });
+});
+describe("Render Free connection wake-up", () => {
+  it("probes the public health endpoint before checking authenticated capabilities", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({ ok: true, version: "0.2.0-beta.2" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await probeService("https://warmsip-api.onrender.com");
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://warmsip-api.onrender.com/healthz",
+        expect.objectContaining({
+          method: "GET",
+          cache: "no-store",
+        }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("reports a waking free instance instead of treating 503 as a valid connection", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("unavailable", { status: 503 })),
+    );
+    try {
+      await expect(
+        probeService("https://warmsip-api.onrender.com"),
+      ).rejects.toMatchObject({
+        name: "ServiceError",
+        code: "HEALTH_503",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("turns a cold-start timeout into an actionable error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              "abort",
+              () => reject(init.signal?.reason),
+              { once: true },
+            );
+          }),
+      ),
+    );
+    try {
+      await expect(
+        probeService("https://warmsip-api.onrender.com", undefined, 5),
+      ).rejects.toBeInstanceOf(ServiceError);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
