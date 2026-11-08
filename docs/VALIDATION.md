@@ -2,6 +2,20 @@
 
 本记录区分实际执行、提供方模拟和未验证项。源码配置存在不等于相应平台已发布。
 
+## 0.2.0-beta.3 当前轮
+
+2026-11-08 在 Windows 11、现有 WSL Ubuntu 26.04 和项目缓存工具链完成：
+
+- ESLint、TypeScript、48 项 Vitest、16 项 Playwright 全部通过；浏览器测试完成后 WebServer 可自行退出。
+- Web/PWA 和 Fastify 生产构建通过；最大 JS 为 677,238 bytes，pi AI SDK 未进入客户端包；生产依赖审计为 0 个已报告漏洞。
+- DeepSeek 环境连接、无文件 usage、旧模型名拒绝、配置来源脱敏、高德 POI 2.0 与 `infocode`、天气 adcode/reporttime 和缓存均有自动化测试。
+- WSL Docker 29.1.3 使用官方 Node 24.22.2 基础镜像构建成功；容器 `/healthz` 返回 `0.2.0-beta.3`，无令牌能力查询为 401，鉴权能力查询为 200，容器重启后健康检查继续通过。
+- Android debug APK 使用 JDK 21、SDK 36 构建，在 Android 15 / Pixel 6 x86_64 模拟器安装并通过地图创建、照片与故事保存、进程重启恢复及系统返回验证。证据见 [android-native-beta3.json](android-native-beta3.json)、[地图截图](screenshots/android-beta3-map.png) 和 [重启截图](screenshots/android-beta3-restart.png)。
+- Windows Tauri NSIS 编译成功并升级安装到 `D:\WarmSip`；产品版本为 `0.2.0-beta.3`，应用启动后响应正常。
+- WSL Linux AppImage 与 DEB 编译成功；DEB 实际安装，并在 Xvfb 中持续运行 12 秒。
+- 本轮未持有可用 DeepSeek、高德 Web 服务或 JS API 凭证，未执行第三方真实请求；Render Free、公网 URL、冷启动和真实在线闭环仍为未验证。
+- GitHub Actions 仍受账户付款/支出额度限制，macOS 包、托管 CI 和 Release 上传尚未完成；HarmonyOS 仍缺官方 SDK 与签名。
+
 ## 0.2.0-beta.2 当前轮
 
 2026-11-06 在现有 Windows 开发机完成 Render Free 准备验证：

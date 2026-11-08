@@ -420,7 +420,12 @@ export function MapDetail() {
   const pointer = useRef(0);
   const dragged = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const aiRequests = useRef(new LatestRequest());
   const all = useMemo(() => places.filter((p) => p.mapId === id), [places, id]);
+  useEffect(() => {
+    const current = aiRequests.current;
+    return () => current.cancel();
+  }, []);
   const filtered = useMemo(
     () => all.filter((p) => status === "all" || p.status === status),
     [all, status],
@@ -461,91 +466,104 @@ export function MapDetail() {
       if (!map) throw new Error("地图不可用");
       if (!settings.aiEnabled) throw new Error("请先在设置中启用 AI");
       setAiText("");
-      if (aiMode === "search") {
-        if (!aiQuery.trim()) throw new Error("请描述想找的地方");
-        let intent: { keyword: string; category: string; city: string; radius: number } | undefined;
-        let streamError = "";
-        await services.streamAI(
-          {
-            taskId: "map-intent",
-            payload: {
-              query: aiQuery,
-              city: map.city,
-              longitude: viewport?.center.longitude,
-              latitude: viewport?.center.latitude,
+      try {
+        await aiRequests.current.run(async (signal) => {
+          if (aiMode === "search") {
+            if (!aiQuery.trim()) throw new Error("请描述想找的地方");
+            let intent:
+              | { keyword: string; category: string; city: string; radius: number }
+              | undefined;
+            let streamError = "";
+            await services.streamAI(
+              {
+                taskId: "map-intent",
+                payload: {
+                  query: aiQuery,
+                  city: map.city,
+                  longitude: viewport?.center.longitude,
+                  latitude: viewport?.center.latitude,
+                },
+                consent: {
+                  taskId: "map-intent",
+                  fields: ["用户搜索描述", "城市"],
+                  includesSensitive: false,
+                  includesPhotos: false,
+                },
+                budget: {
+                  dailyUsd: settings.aiBudgetDailyUsd,
+                  monthlyUsd: settings.aiBudgetMonthlyUsd,
+                },
+              },
+              (event) => {
+                if (event.type === "delta")
+                  setAiText((value) => value + event.delta);
+                if (event.type === "result")
+                  intent = aiMapIntentResultSchema.parse(event.payload);
+                if (event.type === "error") streamError = event.message;
+              },
+              signal,
+            );
+            if (streamError) throw new Error(streamError);
+            if (!intent) throw new Error("AI 没有返回有效的搜索条件");
+            setAiOpen(false);
+            navigate(
+              `/discover?map=${encodeURIComponent(map.id)}&city=${encodeURIComponent(intent.city || map.city)}&keyword=${encodeURIComponent([intent.keyword, intent.category].filter(Boolean).join(" "))}`,
+            );
+            return;
+          }
+          if (!all.length) throw new Error("先记录至少一个地点，再生成足迹故事");
+          let result:
+            | { title: string; narrative: string; blessing: string }
+            | undefined;
+          let streamError = "";
+          await services.streamAI(
+            {
+              taskId: "story",
+              payload: {
+                mapTitle: map.title,
+                places: all.map((place) => ({
+                  name: place.name,
+                  note: settings.aiSendSensitive ? place.note : "",
+                  mood: place.mood,
+                  status: statusLabels[place.status],
+                  visitedAt: place.visitedAt,
+                })),
+                tone: "温柔",
+              },
+              consent: {
+                taskId: "story",
+                fields: [
+                  "地图标题",
+                  "地点名称",
+                  "地点状态",
+                  "地点心情",
+                  ...(settings.aiSendSensitive ? ["私人地点备注"] : []),
+                ],
+                includesSensitive: settings.aiSendSensitive,
+                includesPhotos: false,
+              },
+              budget: {
+                dailyUsd: settings.aiBudgetDailyUsd,
+                monthlyUsd: settings.aiBudgetMonthlyUsd,
+              },
             },
-            consent: {
-              taskId: "map-intent",
-              fields: ["用户搜索描述", "城市"],
-              includesSensitive: false,
-              includesPhotos: false,
+            (event) => {
+              if (event.type === "delta")
+                setAiText((value) => value + event.delta);
+              if (event.type === "result")
+                result = aiStoryResultSchema.parse(event.payload);
+              if (event.type === "error") streamError = event.message;
             },
-            budget: {
-              dailyUsd: settings.aiBudgetDailyUsd,
-              monthlyUsd: settings.aiBudgetMonthlyUsd,
-            },
-          },
-          (event) => {
-            if (event.type === "delta") setAiText((value) => value + event.delta);
-            if (event.type === "result") intent = aiMapIntentResultSchema.parse(event.payload);
-            if (event.type === "error") streamError = event.message;
-          },
-          new AbortController().signal,
-        );
-        if (streamError) throw new Error(streamError);
-        if (!intent) throw new Error("AI 没有返回有效的搜索条件");
-        setAiOpen(false);
-        navigate(
-          `/discover?map=${encodeURIComponent(map.id)}&city=${encodeURIComponent(intent.city || map.city)}&keyword=${encodeURIComponent([intent.keyword, intent.category].filter(Boolean).join(" "))}`,
-        );
-        return;
+            signal,
+          );
+          if (streamError) throw new Error(streamError);
+          if (!result) throw new Error("AI 没有返回有效的足迹故事");
+          setAiStory(result);
+        });
+      } catch (cause) {
+        if (cause instanceof DOMException && cause.name === "AbortError") return;
+        throw cause;
       }
-      if (!all.length) throw new Error("先记录至少一个地点，再生成足迹故事");
-      let result:
-        | { title: string; narrative: string; blessing: string }
-        | undefined;
-      let streamError = "";
-      await services.streamAI(
-        {
-          taskId: "story",
-          payload: {
-            mapTitle: map.title,
-            places: all.map((place) => ({
-              name: place.name,
-              note: settings.aiSendSensitive ? place.note : "",
-              mood: place.mood,
-              status: statusLabels[place.status],
-              visitedAt: place.visitedAt,
-            })),
-            tone: "温柔",
-          },
-          consent: {
-            taskId: "story",
-            fields: [
-              "地图标题",
-              "地点名称",
-              "地点状态",
-              "地点心情",
-              ...(settings.aiSendSensitive ? ["私人地点备注"] : []),
-            ],
-            includesSensitive: settings.aiSendSensitive,
-            includesPhotos: false,
-          },
-          budget: {
-            dailyUsd: settings.aiBudgetDailyUsd,
-            monthlyUsd: settings.aiBudgetMonthlyUsd,
-          },
-        },
-        (event) => {
-          if (event.type === "delta") setAiText((value) => value + event.delta);
-          if (event.type === "result") result = aiStoryResultSchema.parse(event.payload);
-          if (event.type === "error") streamError = event.message;
-        },
-        new AbortController().signal,
-      );
-      if (streamError) throw new Error(streamError);
-      if (!result) throw new Error("AI 没有返回有效的足迹故事");
-      setAiStory(result);
     });
   if (!map)
     return (
@@ -865,6 +883,7 @@ export function MapDetail() {
         <Modal
           title={aiMode === "search" ? "用一句话找暖迹" : "把足迹写成故事"}
           onClose={() => {
+            aiRequests.current.cancel();
             setAiOpen(false);
             setAiStory(undefined);
           }}
@@ -946,6 +965,15 @@ export function MapDetail() {
             <pre className="ai-stream-raw" aria-label="AI 流式生成内容">
               {aiText.slice(-1200)}
             </pre>
+          )}
+          {busy && (
+            <button
+              className="button ghost"
+              type="button"
+              onClick={() => aiRequests.current.cancel()}
+            >
+              取消生成
+            </button>
           )}
         </Modal>
       )}

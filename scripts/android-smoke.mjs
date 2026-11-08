@@ -4,8 +4,25 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 const pkg = "io.github.yuhuangshandian.warmsip";
 const output = "artifacts/android-evidence";
 await mkdir(output, { recursive: true });
-const adb = (...args) =>
+const rawAdb = (...args) =>
   execFileSync("adb", args, { encoding: "utf8", timeout: 30000 });
+function adb(...args) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return rawAdb(...args);
+    } catch (error) {
+      const text = `${error?.stderr || ""}${error?.message || ""}`;
+      if (
+        attempt === 2 ||
+        !/daemon (?:still )?not running|cannot connect to daemon/i.test(text)
+      )
+        throw error;
+      rawAdb("kill-server");
+      rawAdb("start-server");
+    }
+  }
+  throw new Error("ADB did not recover");
+}
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const launcherRecoveries = [];
 

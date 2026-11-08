@@ -1,10 +1,10 @@
-# 0.2.0-beta.2 发布说明与证据清单
+# 0.2.0-beta.3 发布说明与证据清单
 
-开发分支为 `feat/warmsip-render-free-beta.2`。通过 PR 审查和核心门禁后，以被验证的同一提交创建 `v0.2.0-beta.2` 预发布标签。不得覆盖原有 `v0.1.0` 或 `v0.2.0-beta.1` 标签与资产。
+开发分支为 `feat/warmsip-live-deepseek-amap-beta.3`。通过 PR 审查和核心门禁后，以被验证的同一提交创建 `v0.2.0-beta.3` 预发布标签。不得覆盖原有 `v0.1.0`、`v0.2.0-beta.1` 或 `v0.2.0-beta.2` 标签与资产。
 
 每个平台单独记录：配置、编译、签名、安装启动、核心流程验证和上传。GitHub Actions 的平台矩阵使用 `fail-fast: false`，一个平台失败不会掩盖其他平台的结果。发布资产必须带 `SHA256SUMS`，并在上传前执行校验。
 
-当前门禁包括 ESLint、TypeScript、40 项 Vitest、14 项 Playwright 运行、服务端和 Web/PWA 生产构建、生产依赖审计、客户端包边界检查、Docker 健康与鉴权、Tauri、Capacitor 和 ArkWeb 配置。高德、天气、AI 真实推理、签名、公证和 HarmonyOS HAP 必须依据实际凭证与设备日志填写；模拟测试不得写成已联调。
+当前门禁包括 ESLint、TypeScript、48 项 Vitest、16 项 Playwright 运行、服务端和 Web/PWA 生产构建、生产依赖审计、客户端包边界检查、Docker 健康与鉴权、Tauri、Capacitor 和 ArkWeb 配置。高德、天气、AI 真实推理、签名、公证和 HarmonyOS HAP 必须依据实际凭证与设备日志填写；模拟测试不得写成已联调。
 
 ## 工具链与目录
 

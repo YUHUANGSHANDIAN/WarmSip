@@ -19,32 +19,71 @@ import { useData, useSettings } from "../components/data";
 import { Photo, Badge } from "../components/ui";
 import { upcomingAnniversaries } from "../services/time";
 import { services } from "../services/api";
-import { type Weather, statusLabels } from "../domain";
+import { weatherSchema, type Weather, statusLabels } from "../domain";
+const weatherCacheKey = "warmsip.weather-cache.v1";
+function cachedWeather(city: string): Weather | undefined {
+  try {
+    const values = JSON.parse(localStorage.getItem(weatherCacheKey) || "{}") as Record<
+      string,
+      unknown
+    >;
+    const parsed = weatherSchema.safeParse(values[city]);
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+function saveWeather(value: Weather, requestedCity: string) {
+  try {
+    const values = JSON.parse(
+      localStorage.getItem(weatherCacheKey) || "{}",
+    ) as Record<string, Weather>;
+    values[value.city] = value;
+    values[requestedCity] = value;
+    localStorage.setItem(weatherCacheKey, JSON.stringify(values));
+  } catch {
+    // Cached weather is an optional offline aid.
+  }
+}
 export function HomePage() {
   const { profiles, maps, places, orders } = useData();
   const settings = useSettings();
   const [weather, setWeather] = useState<Weather>();
+  const [weatherProfileId, setWeatherProfileId] = useState("");
+  const [weatherCityOverride, setWeatherCityOverride] = useState("");
   const [weatherStatus, setWeatherStatus] = useState<
     "idle" | "loading" | "ready" | "error"
   >("idle");
+  const weatherProfile = profiles.find((profile) => profile.id === weatherProfileId);
+  const weatherCity =
+    weatherCityOverride.trim() || weatherProfile?.city.trim() || settings.city.trim();
   useEffect(() => {
     setWeather(undefined);
     setWeatherStatus("idle");
-    if (!settings.city || !settings.serviceUrl) return;
+    const cached = weatherCity ? cachedWeather(weatherCity) : undefined;
+    if (cached) setWeather(cached);
+    if (!weatherCity || !settings.serviceUrl) return;
     setWeatherStatus("loading");
     const c = new AbortController();
     void services
-      .weather(settings.city, c.signal)
+      .weather(weatherCity, c.signal)
       .then((value) => {
         setWeather(value);
+        saveWeather(value, weatherCity);
         setWeatherStatus("ready");
       })
       .catch((error) => {
-        if (!(error instanceof DOMException && error.name === "AbortError"))
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          if (cached) {
+            setWeather({ ...cached, cacheStatus: "stale" });
+            setWeatherStatus("ready");
+            return;
+          }
           setWeatherStatus("error");
+        }
       });
     return () => c.abort();
-  }, [settings.city, settings.serviceUrl]);
+  }, [weatherCity, settings.serviceUrl]);
   const hour = new Date().getHours();
   const greeting = hour < 11 ? "早上好" : hour < 18 ? "下午好" : "晚上好";
   const anniversary = upcomingAnniversaries(profiles)[0];
@@ -305,6 +344,27 @@ export function HomePage() {
                 <ArrowUpRight size={18} />
               </Link>
             </div>
+            <div className="weather-context">
+              <select
+                aria-label="天气目标收礼人"
+                value={weatherProfileId}
+                onChange={(event) => setWeatherProfileId(event.target.value)}
+              >
+                <option value="">使用默认城市</option>
+                {profiles.map((profile) => (
+                  <option value={profile.id} key={profile.id}>
+                    {profile.name} · {profile.city || "未填写城市"}
+                  </option>
+                ))}
+              </select>
+              <input
+                aria-label="天气城市"
+                value={weatherCityOverride}
+                placeholder={weatherProfile?.city || settings.city || "手动城市"}
+                maxLength={100}
+                onChange={(event) => setWeatherCityOverride(event.target.value)}
+              />
+            </div>
             {weather ? (
               <>
                 <strong>
@@ -316,6 +376,9 @@ export function HomePage() {
                 </p>
                 <small>
                   {weather.source} · {weather.reportedAt}
+                  {weather.cacheStatus !== "fresh"
+                    ? ` · ${weather.cacheStatus === "stale" ? "缓存（可能过期）" : "缓存"}`
+                    : ""}
                 </small>
               </>
             ) : (
@@ -325,13 +388,13 @@ export function HomePage() {
                 </strong>
                 <p>
                   {weatherStatus === "error"
-                    ? `${settings.city} · 天气服务暂不可用，本地建议仍可使用`
-                    : settings.city
-                    ? `${settings.city} · 实时天气暂不可用`
+                    ? `${weatherCity} · 天气服务暂不可用，本地建议仍可使用`
+                    : weatherCity
+                    ? `${weatherCity} · 实时天气暂不可用`
                     : "选一座城市，让关心更贴近 TA。"}
                 </p>
                 <Link to="/settings" className="text-link">
-                  {settings.city ? "查看服务设置" : "设置我的城市"}
+                  {weatherCity ? "查看服务设置" : "设置我的城市"}
                   <ArrowRight size={14} />
                 </Link>
               </>

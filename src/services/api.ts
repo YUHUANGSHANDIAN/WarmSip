@@ -8,6 +8,7 @@ import {
 } from "../domain";
 import {
   aiStateSchema,
+  aiStreamEventSchema,
   type AIState,
   type AIStreamEvent,
   type AIConnectionInput,
@@ -172,6 +173,36 @@ const capabilitiesSchema = z.object({
   map: z.boolean(),
   mapJsKey: z.string(),
   mapProxyUrl: z.string(),
+  details: z.object({
+    ai: z.object({
+      configured: z.boolean(),
+      source: z.string(),
+      lastSuccessAt: z.number().nullable(),
+      lastCheckedAt: z.number().nullable(),
+      lastErrorCode: z.string(),
+    }),
+    places: z.object({
+      configured: z.boolean(),
+      source: z.string(),
+      lastSuccessAt: z.number().nullable(),
+      lastCheckedAt: z.number().nullable(),
+      lastErrorCode: z.string(),
+    }),
+    weather: z.object({
+      configured: z.boolean(),
+      source: z.string(),
+      lastSuccessAt: z.number().nullable(),
+      lastCheckedAt: z.number().nullable(),
+      lastErrorCode: z.string(),
+    }),
+    map: z.object({
+      configured: z.boolean(),
+      source: z.string(),
+      lastSuccessAt: z.number().nullable(),
+      lastCheckedAt: z.number().nullable(),
+      lastErrorCode: z.string(),
+    }),
+  }),
 });
 export interface AIProvider {
   recommend: (
@@ -353,7 +384,9 @@ export const services = {
           .map((line) => line.slice(5).trim())
           .join("\n");
         if (!data) continue;
-        const event = JSON.parse(data) as AIStreamEvent;
+        const event = aiStreamEventSchema.parse(
+          JSON.parse(data),
+        ) as AIStreamEvent;
         onEvent(event);
       }
     }

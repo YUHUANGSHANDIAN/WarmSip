@@ -70,6 +70,36 @@ describe("map adapter contract (simulated provider, not an AMap online test)", (
         ai: false,
         places: true,
         weather: false,
+        details: {
+          ai: {
+            configured: false,
+            source: "",
+            lastSuccessAt: null,
+            lastCheckedAt: null,
+            lastErrorCode: "",
+          },
+          places: {
+            configured: true,
+            source: "高德 Web 服务",
+            lastSuccessAt: null,
+            lastCheckedAt: null,
+            lastErrorCode: "",
+          },
+          weather: {
+            configured: false,
+            source: "",
+            lastSuccessAt: null,
+            lastCheckedAt: null,
+            lastErrorCode: "",
+          },
+          map: {
+            configured: true,
+            source: "高德 JS API",
+            lastSuccessAt: null,
+            lastCheckedAt: null,
+            lastErrorCode: "",
+          },
+        },
       },
       { city: "杭州", onSelect: select, onMove: move, onPick: vi.fn() },
     );

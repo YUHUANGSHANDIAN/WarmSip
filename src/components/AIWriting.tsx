@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Feather, LoaderCircle, Sparkles } from "lucide-react";
 import { aiCopywritingResultSchema } from "../domain";
-import { services } from "../services/api";
+import { LatestRequest, services } from "../services/api";
 import { useSettings } from "./data";
 import { Field, Modal, useAction, useNotice } from "./ui";
 
@@ -21,38 +21,54 @@ export function AIWritingAssistant({
   const [tone, setTone] = useState<"温柔" | "简洁" | "俏皮" | "郑重">("温柔");
   const [result, setResult] = useState("");
   const [draft, setDraft] = useState("");
+  const requests = useRef(new LatestRequest());
   const { busy, run } = useAction();
   const notice = useNotice();
+  useEffect(() => {
+    const current = requests.current;
+    return () => current.cancel();
+  }, []);
+  const close = () => {
+    requests.current.cancel();
+    setOpen(false);
+  };
   const generate = () =>
     run(async () => {
       if (!settings.aiEnabled) throw new Error("请先在设置中启用 AI");
       setResult("");
       let error = "";
-      await services.streamAI(
-        {
-          taskId: "copywriting",
-          payload: { text: source, scene, tone, length: "短" },
-          consent: {
-            taskId: "copywriting",
-            fields: ["用户主动选择的原始文案", "场景", "语气"],
-            includesSensitive: false,
-            includesPhotos: false,
-          },
-          budget: {
-            dailyUsd: settings.aiBudgetDailyUsd,
-            monthlyUsd: settings.aiBudgetMonthlyUsd,
-          },
-        },
-        (event) => {
-          if (event.type === "result") {
-            const parsed = aiCopywritingResultSchema.parse(event.payload);
-            setResult(parsed.text);
-            setDraft(parsed.text);
-          }
-          if (event.type === "error") error = event.message;
-        },
-        new AbortController().signal,
-      );
+      try {
+        await requests.current.run((signal) =>
+          services.streamAI(
+            {
+              taskId: "copywriting",
+              payload: { text: draft, scene, tone, length: "短" },
+              consent: {
+                taskId: "copywriting",
+                fields: ["用户当前编辑的文案", "场景", "语气"],
+                includesSensitive: false,
+                includesPhotos: false,
+              },
+              budget: {
+                dailyUsd: settings.aiBudgetDailyUsd,
+                monthlyUsd: settings.aiBudgetMonthlyUsd,
+              },
+            },
+            (event) => {
+              if (event.type === "result") {
+                const parsed = aiCopywritingResultSchema.parse(event.payload);
+                setResult(parsed.text);
+                setDraft(parsed.text);
+              }
+              if (event.type === "error") error = event.message;
+            },
+            signal,
+          ),
+        );
+      } catch (cause) {
+        if (cause instanceof DOMException && cause.name === "AbortError") return;
+        throw cause;
+      }
       if (error) throw new Error(error);
       notice({ text: "文案已生成；确认后才会覆盖当前内容" });
     });
@@ -70,7 +86,7 @@ export function AIWritingAssistant({
         {label}
       </button>
       {open && (
-        <Modal title="让 AI 帮你润色" onClose={() => setOpen(false)}>
+        <Modal title="让 AI 帮你润色" onClose={close}>
           <p>
             只发送下方这段你主动选择的文字、场景和语气；不发送档案、位置或照片。
           </p>
@@ -111,12 +127,21 @@ export function AIWritingAssistant({
               )}
               {busy ? "正在润色…" : "生成文案"}
             </button>
+            {busy && (
+              <button
+                className="button ghost"
+                type="button"
+                onClick={() => requests.current.cancel()}
+              >
+                取消生成
+              </button>
+            )}
             <button
               className="button primary"
               disabled={!result || busy}
               onClick={() => {
                 onApply(draft.trim());
-                setOpen(false);
+                close();
                 notice({ text: "已采用这次文案" });
               }}
             >

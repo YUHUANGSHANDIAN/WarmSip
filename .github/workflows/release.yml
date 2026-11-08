@@ -2,7 +2,7 @@ name: WarmSip prerelease
 
 on:
   push:
-    tags: ["v0.2.0-beta.2"]
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       platform:

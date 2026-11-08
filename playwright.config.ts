@@ -29,11 +29,4 @@ export default defineConfig({
     },
     { name: "mobile", use: { ...devices["Pixel 7"], browserName: "chromium" } },
   ],
-  webServer: {
-    command: "npm run preview -- --port 1421 --strictPort",
-    url: "http://127.0.0.1:1421",
-    reuseExistingServer: false,
-    timeout: 120_000,
-    gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
-  },
 });

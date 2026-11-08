@@ -12,6 +12,7 @@ import { zipSync } from "fflate";
 const [kind, selectedPlatform, target] = process.argv.slice(2);
 const { version } = JSON.parse(await readFile("package.json", "utf8"));
 const platform = kind === "desktop" ? selectedPlatform : kind;
+const artifactRoot = process.env.WARMSIP_ARTIFACT_ROOT || "artifacts";
 if (
   ![
     "web",
@@ -23,7 +24,7 @@ if (
   ].includes(platform)
 )
   throw new Error("Unsupported package platform");
-const output = join("artifacts", platform);
+const output = join(artifactRoot, platform);
 await mkdir(output, { recursive: true });
 async function walk(path) {
   const result = [];
@@ -76,8 +77,10 @@ if (kind === "web") {
     : platform.startsWith("linux")
       ? [".AppImage", ".deb"]
       : [".dmg"];
-  const files = (await walk(target)).filter((p) =>
-    extensions.some((e) => p.endsWith(e)),
+  const files = (await walk(target)).filter(
+    (p) =>
+      basename(p).includes(version) &&
+      extensions.some((e) => p.endsWith(e)),
   );
   for (const extension of extensions) {
     const found = files.filter((p) => p.endsWith(extension));
@@ -102,7 +105,7 @@ await writeFile(
       commit: sha,
       platform,
       builtAt: new Date().toISOString(),
-      runner: process.platform,
+      runner: process.env.WARMSIP_BUILD_RUNNER || process.platform,
       compiled: true,
       signature:
         platform === "android"

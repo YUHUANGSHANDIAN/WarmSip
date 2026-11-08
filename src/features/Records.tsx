@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Link,
   useNavigate,
@@ -45,7 +45,7 @@ import {
   orderStatusLabels,
 } from "../domain";
 import { canOpen, localDate } from "../services/time";
-import { services } from "../services/api";
+import { LatestRequest, services } from "../services/api";
 import { platform } from "../platform";
 
 export function OrdersPage() {
@@ -794,6 +794,7 @@ export function CapsuleDetail() {
 export function CityPage() {
   const settings = useSettings();
   const [city, setCity] = useState(settings.city);
+  const requests = useRef(new LatestRequest());
   const [guide, setGuide] = useState<{
     title: string;
     summary: string;
@@ -802,6 +803,10 @@ export function CityPage() {
   }>();
   const { busy, run } = useAction();
   const notice = useNotice();
+  useEffect(() => {
+    const current = requests.current;
+    return () => current.cancel();
+  }, []);
   const generateGuide = () =>
     run(async () => {
       if (!settings.aiEnabled) throw new Error("请先在设置中启用 AI");
@@ -809,28 +814,35 @@ export function CityPage() {
       setGuide(undefined);
       let next: typeof guide;
       let error = "";
-      await services.streamAI(
-        {
-          taskId: "city-guide",
-          payload: { city, interests: ["食物", "文化", "散步"] },
-          consent: {
-            taskId: "city-guide",
-            fields: ["城市", "兴趣主题"],
-            includesSensitive: false,
-            includesPhotos: false,
-          },
-          budget: {
-            dailyUsd: settings.aiBudgetDailyUsd,
-            monthlyUsd: settings.aiBudgetMonthlyUsd,
-          },
-        },
-        (event) => {
-          if (event.type === "result")
-            next = aiCityGuideResultSchema.parse(event.payload);
-          if (event.type === "error") error = event.message;
-        },
-        new AbortController().signal,
-      );
+      try {
+        await requests.current.run((signal) =>
+          services.streamAI(
+            {
+              taskId: "city-guide",
+              payload: { city, interests: ["食物", "文化", "散步"] },
+              consent: {
+                taskId: "city-guide",
+                fields: ["城市", "兴趣主题"],
+                includesSensitive: false,
+                includesPhotos: false,
+              },
+              budget: {
+                dailyUsd: settings.aiBudgetDailyUsd,
+                monthlyUsd: settings.aiBudgetMonthlyUsd,
+              },
+            },
+            (event) => {
+              if (event.type === "result")
+                next = aiCityGuideResultSchema.parse(event.payload);
+              if (event.type === "error") error = event.message;
+            },
+            signal,
+          ),
+        );
+      } catch (cause) {
+        if (cause instanceof DOMException && cause.name === "AbortError") return;
+        throw cause;
+      }
       if (error) throw new Error(error);
       if (!next) throw new Error("AI 没有返回可用的城市导览");
       setGuide(next);
@@ -876,6 +888,15 @@ export function CityPage() {
             <Sparkles size={16} />
             {busy ? "正在编辑导览…" : "生成 AI 城市导览"}
           </button>
+          {busy && (
+            <button
+              type="button"
+              className="button ghost"
+              onClick={() => requests.current.cancel()}
+            >
+              取消生成
+            </button>
+          )}
           <Link
             className="button primary"
             to={`/discover?city=${encodeURIComponent(city)}`}

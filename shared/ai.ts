@@ -46,6 +46,8 @@ export const aiConnectionStatuses = [
 export const aiConnectionSchema = z.object({
   id: z.string().min(1).max(120),
   providerId: z.enum(aiProviderIds),
+  origin: z.enum(["environment", "runtime"]).default("runtime"),
+  managedByService: z.boolean().default(false),
   label: text.min(1).max(100),
   authType: z.enum(["api-key", "oauth", "local"]),
   baseUrl: z.string().default(""),
@@ -111,6 +113,7 @@ export type AIUsageSummary = z.infer<typeof aiUsageSummarySchema>;
 export const aiStateSchema = z.object({
   available: z.boolean(),
   credentialManagementReady: z.boolean(),
+  persistence: z.enum(["encrypted-file", "process-memory"]),
   connections: z.array(aiConnectionSchema),
   models: z.array(aiModelDescriptorSchema),
   routes: z.array(aiTaskRouteSchema),
@@ -244,6 +247,34 @@ export type AIStreamEvent =
     }
   | { type: "error"; code: string; message: string }
   | { type: "done"; cancelled?: boolean };
+
+export const aiStreamEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("start"),
+    runId: z.string().min(1),
+    providerId: z.string().min(1),
+    connectionId: z.string().min(1),
+    modelId: z.string().min(1),
+  }),
+  z.object({ type: z.literal("delta"), delta: z.string() }),
+  z.object({ type: z.literal("result"), payload: z.unknown() }),
+  z.object({
+    type: z.literal("usage"),
+    inputTokens: z.number().int().nonnegative(),
+    outputTokens: z.number().int().nonnegative(),
+    costUsd: z.number().nonnegative(),
+    costSource: z.enum(["provider", "estimated", "unknown"]),
+  }),
+  z.object({
+    type: z.literal("error"),
+    code: z.string().min(1),
+    message: z.string(),
+  }),
+  z.object({
+    type: z.literal("done"),
+    cancelled: z.boolean().optional(),
+  }),
+]);
 
 export const aiConnectionInputSchema = z.object({
   id: z.string().min(1).max(80).optional(),

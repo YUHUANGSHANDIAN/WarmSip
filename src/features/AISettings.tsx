@@ -201,7 +201,9 @@ export function AISettings({ enabled }: { enabled: boolean }) {
             AI 模型与连接
           </h2>
           <p className="muted">
-            凭证由你配置的单租户服务加密保管，当前客户端不会持久化模型密钥。
+            {state?.persistence === "process-memory"
+              ? "当前连接由服务端环境变量提供，密钥不进入客户端；诊断与用量仅在本次服务进程内保留。"
+              : "凭证由单租户服务加密保管，当前客户端不会持久化模型密钥。"}
           </p>
         </div>
         <Badge tone={state?.available ? "sage" : "neutral"}>
@@ -258,7 +260,10 @@ export function AISettings({ enabled }: { enabled: boolean }) {
                     </Badge>
                     <h3>{connection.label}</h3>
                     <p>
-                      {methodLabels[connection.authType]} · {connection.maskedCredential}
+                      {connection.origin === "environment"
+                        ? "服务端环境 · 只读"
+                        : methodLabels[connection.authType]}{" "}
+                      · {connection.maskedCredential}
                     </p>
                     <small>{connection.modelCount} 个可用模型</small>
                     {connection.lastError && (
@@ -282,7 +287,7 @@ export function AISettings({ enabled }: { enabled: boolean }) {
                     <button
                       className="icon-button"
                       aria-label={`刷新${connection.label}模型`}
-                      disabled={busy}
+                      disabled={busy || connection.origin === "environment"}
                       onClick={() =>
                         void run(async () => {
                           await services.refreshAIModels(connection.id);
@@ -296,7 +301,7 @@ export function AISettings({ enabled }: { enabled: boolean }) {
                     <button
                       className="icon-button danger"
                       aria-label={`移除${connection.label}连接`}
-                      disabled={busy}
+                      disabled={busy || connection.managedByService}
                       onClick={() =>
                         void run(async () => {
                           await services.removeAIConnection(connection.id);
@@ -314,10 +319,20 @@ export function AISettings({ enabled }: { enabled: boolean }) {
               <p className="muted">还没有模型连接。添加后先测试，再为任务选择模型。</p>
             )}
           </div>
-          <button className="button secondary" onClick={() => setAdding(true)}>
-            <Plus size={16} />
-            添加模型连接
-          </button>
+          {state.credentialManagementReady ? (
+            <button className="button secondary" onClick={() => setAdding(true)}>
+              <Plus size={16} />
+              添加模型连接
+            </button>
+          ) : (
+            <div className="info-panel">
+              <LockKeyhole size={18} />
+              <p>
+                Render Free 使用临时文件系统，本版只开放服务端环境变量管理的
+                DeepSeek 连接，不支持从客户端写入会在重启后丢失的模型凭证。
+              </p>
+            </div>
+          )}
           <div className="privacy-note">
             <ShieldCheck size={20} />
             <div>
@@ -334,15 +349,18 @@ export function AISettings({ enabled }: { enabled: boolean }) {
             每个任务显式选择模型；失败不会静默跨供应商重试，也不会改变数据目的地。
           </p>
           <div className="ai-route-list">
-            {aiTaskIds.slice(0, 5).map((taskId) => {
+            {aiTaskIds.map((taskId) => {
               const route = routes.find((item) => item.taskId === taskId);
               const choices = state.models.filter(
                 (model) =>
                   state.connections.find(
                     (connection) =>
-                      connection.id === model.providerId &&
+                      (connection.providerId === "custom"
+                        ? connection.id
+                        : connection.providerId) === model.providerId &&
                       connection.enabled &&
-                      connection.status === "connected",
+                      (connection.origin === "environment" ||
+                        connection.status === "connected"),
                   ),
               );
               return (
@@ -353,6 +371,7 @@ export function AISettings({ enabled }: { enabled: boolean }) {
                   </div>
                   <select
                     aria-label={`${aiTaskLabels[taskId]}默认模型`}
+                    disabled={!state.credentialManagementReady}
                     value={route ? `${route.connectionId}|${route.modelId}` : ""}
                     onChange={(event) => {
                       const [connectionId, modelId] = event.target.value.split("|");
@@ -365,20 +384,32 @@ export function AISettings({ enabled }: { enabled: boolean }) {
                     }}
                   >
                     <option value="">未配置</option>
-                    {choices.map((model) => (
-                      <option
-                        key={`${model.providerId}:${model.id}`}
-                        value={`${model.providerId}|${model.id}`}
-                      >
-                        {model.name} · {model.providerId}
-                      </option>
-                    ))}
+                    {choices.map((model) => {
+                      const connection = state.connections.find(
+                        (item) =>
+                          (item.providerId === "custom"
+                            ? item.id
+                            : item.providerId) === model.providerId,
+                      );
+                      return (
+                        <option
+                          key={`${model.providerId}:${model.id}`}
+                          value={`${connection?.id || model.providerId}|${model.id}`}
+                        >
+                          {model.name} · {connection?.label || model.providerId}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               );
             })}
           </div>
-          <button className="button primary" disabled={busy} onClick={saveRoutes}>
+          <button
+            className="button primary"
+            disabled={busy || !state.credentialManagementReady}
+            onClick={saveRoutes}
+          >
             保存任务路由
           </button>
         </>
@@ -406,6 +437,9 @@ export function AISettings({ enabled }: { enabled: boolean }) {
             <CreditCard size={18} />
             <p>
               费用仅是服务商报告值或模型目录估算，不等同于官方账单。预算上限在本地设置中配置。
+              {state.persistence === "process-memory"
+                ? " 当前运行在临时服务实例上，重启后用量记录会清空。"
+                : ""}
             </p>
           </div>
           <div className="usage-list">

@@ -1,6 +1,6 @@
 {
   "name": "warmsip",
-  "version": "0.2.0-beta.2",
+  "version": "0.2.0-beta.3",
   "private": true,
   "type": "module",
   "engines": {
@@ -13,7 +13,7 @@
     "typecheck": "tsc -b",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/run-e2e.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "check:bundle": "node scripts/check-bundle.mjs",
     "server:dev": "tsx server/index.ts",
@@ -23,6 +23,7 @@
     "tauri": "tauri",
     "android:sync": "npm run build && cap sync android",
     "harmony:sync": "node scripts/harmony-sync.mjs",
+    "live:check": "node scripts/live-integration.mjs",
     "checksums": "node scripts/checksums.mjs"
   },
   "dependencies": {
