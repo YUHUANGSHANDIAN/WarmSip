@@ -129,7 +129,7 @@ export function SettingsPage() {
             本地使用 · 无需账号 · 地图默认私人
           </p>
         </div>
-        <Badge tone="warm">0.2.0-beta.4 预发布版</Badge>
+        <Badge tone="warm">0.2.0-beta.5 预发布版</Badge>
       </div>
       <div className="settings-shortcuts">
         <Link to="/profiles">

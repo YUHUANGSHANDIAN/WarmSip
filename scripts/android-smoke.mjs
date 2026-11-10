@@ -208,9 +208,15 @@ function clickText(selector, label) {
   element.click();
 }
 
-function clickHref(selector, fragment) {
+function clickHref(selector, fragment, excludedFragment = "") {
   const element = [...document.querySelectorAll(selector)].find((item) =>
-    item.getAttribute("href")?.includes(fragment),
+    (() => {
+      const href = item.getAttribute("href");
+      return (
+        href?.includes(fragment) &&
+        (!excludedFragment || !href.includes(excludedFragment))
+      );
+    })(),
   );
   if (!element) return false;
   element.click();
@@ -326,7 +332,7 @@ try {
       (h) => h.textContent.trim() === "Android 暖迹验收",
     ),
   );
-  await session.waitFor(clickHref, "a", "/places/");
+  await session.waitFor(clickHref, "a", "/places/", "/places/new");
   await session.waitFor(
     () =>
       document.querySelectorAll('button[aria-label="移除此照片"]').length === 1,

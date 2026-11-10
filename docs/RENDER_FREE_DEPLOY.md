@@ -1,6 +1,6 @@
 # Render Free 零付费部署
 
-本说明对应 WarmSip `0.2.0-beta.4` 与 `https://github.com/YUHUANGSHANDIAN/WarmSip`。目标是用现有 Fastify Docker 服务获得一个公网 HTTPS 地址，不购买服务器、域名、数据库、Persistent Disk 或付费实例。
+本说明对应 WarmSip `0.2.0-beta.5` 与 `https://github.com/YUHUANGSHANDIAN/WarmSip`。目标是用现有 Fastify Docker 服务获得一个公网 HTTPS 地址，不购买服务器、域名、数据库、Persistent Disk 或付费实例。
 
 ## 部署前边界
 
@@ -92,7 +92,7 @@ Invoke-RestMethod https://warmsip-api-xxxx.onrender.com/healthz
 ```json
 {
   "ok": true,
-  "version": "0.2.0-beta.4"
+  "version": "0.2.0-beta.5"
 }
 ```
 

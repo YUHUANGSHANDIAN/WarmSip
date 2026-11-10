@@ -1,6 +1,6 @@
 [package]
 name = "warmsip"
-version = "0.2.0-beta.4"
+version = "0.2.0-beta.5"
 description = "WarmSip — Send a Little Warmth"
 authors = ["YUHUANGSHANDIAN"]
 edition = "2021"

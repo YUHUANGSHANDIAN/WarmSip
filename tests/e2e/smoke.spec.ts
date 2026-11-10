@@ -54,7 +54,7 @@ test("设置页核对服务端 DeepSeek、高德和真实调用状态", async ({
       status: 200,
       contentType: "application/json",
       headers: cors,
-      body: JSON.stringify({ ok: true, version: "0.2.0-beta.4" }),
+      body: JSON.stringify({ ok: true, version: "0.2.0-beta.5" }),
     }),
   );
   await page.route(
