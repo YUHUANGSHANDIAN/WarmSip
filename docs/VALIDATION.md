@@ -4,10 +4,16 @@
 
 ## 0.2.0-beta.5 当前轮
 
-2026-11-10 进行中：
+2026-11-10 完成：
 
-- beta.4 hosted Android 门禁暴露 `/places/new` 与已保存地点详情链接的选择器歧义；新脚本排除新增入口后，由 beta.5 从新 Tag 重新执行所有平台门禁。
-- beta.3/beta.4 均未公开 Release，也未上传平台安装包；其失败 Run、Tag 与 Draft 作为不可变证据保留。
+- `v0.2.0-beta.5` 从主分支提交 `396551d73995a9c641c80d380a0097ce5cbbdc09` 构建并公开发布，所有平台构建元数据记录同一提交。
+- PR #22 与主分支质量、16 项 Playwright、Docker 健康/鉴权、秘密扫描和生产依赖审计通过；PR #23 与后续主分支再次通过，修复无 checkout 的发布汇总作业缺少仓库上下文问题。
+- Windows x64 NSIS 下载包 SHA-256 为 `4977b0267ac3ac0c6b66365876dd0ed0dfdb7131408c2a402b1b2cff895b8b80`，未签名；本机升级后版本为 `0.2.0-beta.5`，已有地图、照片、故事、编辑保存和 AI 设置页均恢复。
+- Linux x64 AppImage/DEB 在 Ubuntu runner 构建，DEB 安装与 Xvfb 启动冒烟通过；macOS arm64/x64 DMG 均完成挂载、ad-hoc 签名、安装复制与进程存活检查，未公证。
+- Android debug APK 在 Android 15 / Pixel 6 x86_64 模拟器通过地图、照片、故事、进程重启恢复与系统返回流程；不是正式商店签名。
+- Web/PWA 与 Server ZIP 从同一提交构建；服务端 Docker 健康为 200，未授权能力接口为 401，授权接口为 200。ZIP 不含 `.env`、IndexedDB、WebView 用户数据或服务端密钥模式。
+- Release 共 21 个资产，公开 `SHA256SUMS` 下载回验 14/14 通过；匿名资产请求返回 200。`v0.2.0-beta.3`、`v0.2.0-beta.4` 的失败 Tag 与 Draft 保留，未公开。
+- 本机无 `.env`/`.env.local`，DeepSeek、高德 Web 服务/JS API、天气与 Render 公网实例仍为 **未联调**；HarmonyOS 仍无 HAP。
 
 ## 0.2.0-beta.4 基线轮
 

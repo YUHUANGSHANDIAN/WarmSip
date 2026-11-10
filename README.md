@@ -6,7 +6,7 @@ WarmSip 0.2.0-beta.5 是无需注册的本地关怀记录应用：保存收礼�
 
 **预发布状态：** 本地业务、暖纸手帐设计系统、pi AI 1.5.0 多模型服务、流式选礼、文案、地图灵感、城市导览和足迹故事均已实现。缺少生产凭证时，真实在线服务仍会明确显示“未联调”。HarmonyOS 暂无可安装 HAP。
 
-[发布状态](https://github.com/YUHUANGSHANDIAN/WarmSip/releases) · [CI](https://github.com/YUHUANGSHANDIAN/WarmSip/actions) · [变更记录](docs/CHANGELOG.md) · [构建发布](docs/RELEASE.md) · [平台与存储策略](docs/PLATFORM_POLICY.md) · [Render 免费部署](docs/RENDER_FREE_DEPLOY.md) · [在线联调](docs/ONLINE_INTEGRATION.md)
+[最新预发布 v0.2.0-beta.5](https://github.com/YUHUANGSHANDIAN/WarmSip/releases/tag/v0.2.0-beta.5) · [CI](https://github.com/YUHUANGSHANDIAN/WarmSip/actions) · [变更记录](docs/CHANGELOG.md) · [构建发布](docs/RELEASE.md) · [平台与存储策略](docs/PLATFORM_POLICY.md) · [Render 免费部署](docs/RENDER_FREE_DEPLOY.md) · [在线联调](docs/ONLINE_INTEGRATION.md)
 
 [桌面首页](docs/screenshots/home-desktop.png) · [移动深色主题](docs/screenshots/home-mobile-dark.png) · [移动暖迹地图](docs/screenshots/map-mobile.png) · [AI 连接中心](docs/screenshots/ai-settings-mobile.png) · [beta.3 Android 地图](docs/screenshots/android-beta3-map.png) · [beta.3 重启恢复](docs/screenshots/android-beta3-restart.png)
 
