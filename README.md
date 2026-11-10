@@ -6,7 +6,7 @@ WarmSip 0.2.0-beta.3 是无需注册的本地关怀记录应用：保存收礼�
 
 **预发布状态：** 本地业务、暖纸手帐设计系统、pi AI 1.5.0 多模型服务、流式选礼、文案、地图灵感、城市导览和足迹故事均已实现。缺少生产凭证时，真实在线服务仍会明确显示“未联调”。HarmonyOS 暂无可安装 HAP。
 
-[发布状态](https://github.com/YUHUANGSHANDIAN/WarmSip/releases) · [CI](https://github.com/YUHUANGSHANDIAN/WarmSip/actions) · [变更记录](docs/CHANGELOG.md) · [构建发布](docs/RELEASE.md) · [Render 免费部署](docs/RENDER_FREE_DEPLOY.md) · [在线联调](docs/ONLINE_INTEGRATION.md)
+[发布状态](https://github.com/YUHUANGSHANDIAN/WarmSip/releases) · [CI](https://github.com/YUHUANGSHANDIAN/WarmSip/actions) · [变更记录](docs/CHANGELOG.md) · [构建发布](docs/RELEASE.md) · [平台与存储策略](docs/PLATFORM_POLICY.md) · [Render 免费部署](docs/RENDER_FREE_DEPLOY.md) · [在线联调](docs/ONLINE_INTEGRATION.md)
 
 [桌面首页](docs/screenshots/home-desktop.png) · [移动深色主题](docs/screenshots/home-mobile-dark.png) · [移动暖迹地图](docs/screenshots/map-mobile.png) · [AI 连接中心](docs/screenshots/ai-settings-mobile.png) · [beta.3 Android 地图](docs/screenshots/android-beta3-map.png) · [beta.3 重启恢复](docs/screenshots/android-beta3-restart.png)
 
@@ -53,17 +53,19 @@ Render Free 可以通过静态环境变量启用 DeepSeek、高德 POI/地理编
 
 ## 平台与工程
 
-| 目标 | 实现与产物 |
-| --- | --- |
-| Windows x64 | Tauri 2，NSIS EXE，未配置 Authenticode |
-| Linux x64 | Tauri 2，Ubuntu 24.04 构建 AppImage / DEB |
-| macOS arm64 / x64 | 两个独立 Runner，DMG，ad-hoc 测试签名，无公证 |
-| Android | Capacitor 8，API 24+，debug APK；正式签名未配置 |
-| Web / PWA | 生产静态 ZIP；应用壳离线缓存，不缓存地图资源 |
-| HarmonyOS | ArkWeb 适配原型，需官方模板、SDK、原生桥和签名后完成 HAP 验证 |
+| 目标              | 实现与产物                                                                    |
+| ----------------- | ----------------------------------------------------------------------------- |
+| Windows x64       | Tauri 2，`windows-2025` 构建 NSIS EXE；未配置 Authenticode                    |
+| Linux x64         | Tauri 2，`ubuntu-24.04` 构建 AppImage / DEB 并启动冒烟                        |
+| macOS arm64 / x64 | 两个独立标准 Runner 构建 DMG；ad-hoc 测试签名，无公证                         |
+| Android           | Capacitor 8，API 24+，CI 构建 debug APK 并运行模拟器流程；正式签名未配置      |
+| Web / PWA         | CI 生成生产静态 ZIP；应用壳离线缓存，不缓存地图资源                           |
+| HarmonyOS         | ArkWeb 适配原型，需官方模板、SDK、原生桥和签名后完成 HAP 验证；当前不交付 HAP |
 
 `src/` 为 React 业务、`shared/` 为领域校验、`server/` 为 Fastify 服务、`src-tauri/` 与 `android/` 为原生工程。参考附件保留在开发目录并从版本控制排除；源码和杯子/爱心蒸汽/定位品牌均重新编写绘制。
 
-[AI 架构与安全](docs/AI.md) · [地图技术说明](docs/MAP_TECHNICAL.md) · [品牌规范](docs/BRAND.md) · [HarmonyOS 阻塞与接入](harmony/README.md)
+Windows 是本机唯一保留的安装、运行与原生验收平台；Linux、macOS、Android、Web 和 HarmonyOS 的构建统一使用 GitHub Public 仓库的标准 hosted runner。工作流不使用 Larger runner、付费存储或外部收费云构建。
+
+[AI 架构与安全](docs/AI.md) · [地图技术说明](docs/MAP_TECHNICAL.md) · [品牌规范](docs/BRAND.md) · [平台与存储策略](docs/PLATFORM_POLICY.md) · [HarmonyOS 阻塞与接入](harmony/README.md)
 
 许可证：[MIT](LICENSE)。

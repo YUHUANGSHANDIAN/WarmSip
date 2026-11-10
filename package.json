@@ -14,6 +14,7 @@
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
     "test:e2e": "node scripts/run-e2e.mjs",
+    "secret:scan": "node scripts/secret-scan.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "check:bundle": "node scripts/check-bundle.mjs",
     "server:dev": "tsx server/index.ts",
