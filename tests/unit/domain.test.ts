@@ -165,7 +165,7 @@ describe("request cancellation", () => {
 describe("Render Free connection wake-up", () => {
   it("probes the public health endpoint before checking authenticated capabilities", async () => {
     const fetchMock = vi.fn(async () =>
-      Response.json({ ok: true, version: "0.2.0-beta.3" }),
+      Response.json({ ok: true, version: "0.2.0-beta.4" }),
     );
     vi.stubGlobal("fetch", fetchMock);
     try {

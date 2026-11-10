@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const VERSION = "0.2.0-beta.3";
+export const VERSION = "0.2.0-beta.4";
 const text = z.string().trim();
 const timestamp = z.number().int().nonnegative();
 export const dateOnly = z.string().refine((s) => {

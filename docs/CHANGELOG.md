@@ -1,5 +1,11 @@
 # 变更记录
 
+## 0.2.0-beta.4 · Android 恢复流程与发布门禁
+
+- 修复 Android 进程重启后地点详情的自动化竞态：等待链接时可重复查询并在同一 DOM 任务内点击，避免短暂重渲染造成漏点。
+- 增加公开仓库历史秘密扫描、GitHub Secret Scanning/Push Protection、Dependabot 与 Actions 固定提交门禁。
+- PR 与主分支只执行一次质量门禁；发布工作流只使用标准 hosted runner，临时 Artifact 保留两天，全部平台成功后才上传统一 Draft 资产。
+
 ## 0.2.0-beta.3 · DeepSeek、高德与天气真实联调
 
 - DeepSeek 环境变量连接成为无需临时文件的一等 AI 连接，默认 `deepseek-flash`，显式支持 `deepseek-v4-pro`，拒绝旧模型名。

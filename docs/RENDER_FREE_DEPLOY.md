@@ -1,6 +1,6 @@
 # Render Free 零付费部署
 
-本说明对应 WarmSip `0.2.0-beta.3` 与 `https://github.com/YUHUANGSHANDIAN/WarmSip`。目标是用现有 Fastify Docker 服务获得一个公网 HTTPS 地址，不购买服务器、域名、数据库、Persistent Disk 或付费实例。
+本说明对应 WarmSip `0.2.0-beta.4` 与 `https://github.com/YUHUANGSHANDIAN/WarmSip`。目标是用现有 Fastify Docker 服务获得一个公网 HTTPS 地址，不购买服务器、域名、数据库、Persistent Disk 或付费实例。
 
 ## 部署前边界
 
@@ -8,7 +8,7 @@
 - 免费容器文件系统是临时的。基础 URL、环境变量和镜像可恢复，但运行中写入 `/app/data` 的 AI 连接、凭证和用量不保证跨重启保留。
 - DeepSeek、高德 Web 服务与 JS 底图凭证通过 Render 环境变量在进程启动时读取，可以在休眠重启后恢复。
 - 服务端自身不产生本阶段 Render 实例费用；AI、高德和天气供应商可能独立计费。任何免费额度都以其当前官方政策为准。
-- 仓库仍为私有。Render 需要获得读取 `YUHUANGSHANDIAN/WarmSip` 的 GitHub 权限。
+- 仓库已公开。Render 应只获得部署所需的只读仓库权限，不配置收费实例或 Persistent Disk。
 
 ## 1. 创建免费 Web Service
 
@@ -17,21 +17,21 @@
 3. 选择 **New → Web Service**，连接 `YUHUANGSHANDIAN/WarmSip`。
 4. 按以下字段填写。
 
-| Render 字段 | 填写值 |
-| --- | --- |
-| Name | `warmsip-api`，如名称占用可加个人后缀 |
-| Language / Runtime | **Docker** |
-| Branch | `main` |
-| Root Directory | 留空 |
-| Dockerfile Path | `./Dockerfile` |
-| Docker Build Context | 仓库根目录 |
-| Instance Type | **Free**，确认显示 `$0/月` |
-| Region | 优先 **Singapore**；若免费列表没有该区域，选择 Dashboard 提供的最接近区域 |
-| Health Check Path | `/healthz` |
-| Persistent Disk | 不添加 |
-| Auto-Deploy | **Off**，首阶段只手动部署已通过 CI 的 `main` |
-| Build Command | 留空，Dockerfile 内执行 `npm run server:build` |
-| Start Command | 留空，Dockerfile 使用 `node dist-server/server/index.js` |
+| Render 字段          | 填写值                                                                    |
+| -------------------- | ------------------------------------------------------------------------- |
+| Name                 | `warmsip-api`，如名称占用可加个人后缀                                     |
+| Language / Runtime   | **Docker**                                                                |
+| Branch               | `main`                                                                    |
+| Root Directory       | 留空                                                                      |
+| Dockerfile Path      | `./Dockerfile`                                                            |
+| Docker Build Context | 仓库根目录                                                                |
+| Instance Type        | **Free**，确认显示 `$0/月`                                                |
+| Region               | 优先 **Singapore**；若免费列表没有该区域，选择 Dashboard 提供的最接近区域 |
+| Health Check Path    | `/healthz`                                                                |
+| Persistent Disk      | 不添加                                                                    |
+| Auto-Deploy          | **Off**，首阶段只手动部署已通过 CI 的 `main`                              |
+| Build Command        | 留空，Dockerfile 内执行 `npm run server:build`                            |
+| Start Command        | 留空，Dockerfile 使用 `node dist-server/server/index.js`                  |
 
 `Dockerfile` 已监听 `HOST=0.0.0.0`。Render 会自动设置 `PORT`，应用通过 `process.env.PORT` 使用该值。不要自行填写 `PORT`。
 
@@ -53,18 +53,18 @@ $rng.Dispose()
 
 在 Render 的 **Environment** 中设置：
 
-| 名称 | 值 |
-| --- | --- |
-| `HOST` | `0.0.0.0` |
-| `SERVICE_ACCESS_TOKEN` | 上一步的随机令牌，选择 Secret |
-| `ALLOWED_ORIGINS` | `http://localhost:1420,http://127.0.0.1:1420,http://tauri.localhost,tauri://localhost,https://localhost` |
-| `ALLOW_LOCAL_AI_ENDPOINTS` | `false` |
-| `AI_BASE_URL` | `https://api.deepseek.com` |
-| `AI_MODEL` | `deepseek-flash`；只有明确需要时才改为 `deepseek-v4-pro` |
-| `AI_API_KEY` | 用户自己的 DeepSeek Key，选择 Secret |
-| `AMAP_WEB_SERVICE_KEY` | 高德 Web 服务 Key，选择 Secret |
-| `AMAP_JS_KEY` | 高德 Web 端（JS API）Key |
-| `AMAP_SECURITY_CODE` | 与 JS API Key 配套的安全密钥，选择 Secret |
+| 名称                       | 值                                                                                                       |
+| -------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `HOST`                     | `0.0.0.0`                                                                                                |
+| `SERVICE_ACCESS_TOKEN`     | 上一步的随机令牌，选择 Secret                                                                            |
+| `ALLOWED_ORIGINS`          | `http://localhost:1420,http://127.0.0.1:1420,http://tauri.localhost,tauri://localhost,https://localhost` |
+| `ALLOW_LOCAL_AI_ENDPOINTS` | `false`                                                                                                  |
+| `AI_BASE_URL`              | `https://api.deepseek.com`                                                                               |
+| `AI_MODEL`                 | `deepseek-flash`；只有明确需要时才改为 `deepseek-v4-pro`                                                 |
+| `AI_API_KEY`               | 用户自己的 DeepSeek Key，选择 Secret                                                                     |
+| `AMAP_WEB_SERVICE_KEY`     | 高德 Web 服务 Key，选择 Secret                                                                           |
+| `AMAP_JS_KEY`              | 高德 Web 端（JS API）Key                                                                                 |
+| `AMAP_SECURITY_CODE`       | 与 JS API Key 配套的安全密钥，选择 Secret                                                                |
 
 `AI_BASE_URL`、`AI_MODEL`、`AI_API_KEY` 必须三项同时填写。不要设置 `AI_CREDENTIAL_ENCRYPTION_KEY`、`AI_DATA_FILE` 或 `AI_DATA_DIR` 来模拟持久化；Render Free 没有持久文件系统。
 
@@ -92,7 +92,7 @@ Invoke-RestMethod https://warmsip-api-xxxx.onrender.com/healthz
 ```json
 {
   "ok": true,
-  "version": "0.2.0-beta.3"
+  "version": "0.2.0-beta.4"
 }
 ```
 
@@ -128,14 +128,14 @@ Invoke-RestMethod https://warmsip-api-xxxx.onrender.com/api/v1/capabilities -Hea
 
 ## 8. 常见错误
 
-| 状态 | 含义与处理 |
-| --- | --- |
-| 唤醒超时 | Render 冷启动超过 90 秒；查看 Render Logs，稍后重试 |
-| 401 | Render 的 `SERVICE_ACCESS_TOKEN` 与客户端输入不一致 |
-| 403 | 客户端 Origin 不在 `ALLOWED_ORIGINS`，添加精确 Origin |
-| 502/503 | 服务正在启动、崩溃或上游未配置 |
-| 健康检查失败但业务 401 | `/healthz` 不应鉴权，检查反向代理路径 |
-| AI 设置待配置 | 基础部署的正常状态；外部 AI 尚未启用 |
+| 状态                     | 含义与处理                                               |
+| ------------------------ | -------------------------------------------------------- |
+| 唤醒超时                 | Render 冷启动超过 90 秒；查看 Render Logs，稍后重试      |
+| 401                      | Render 的 `SERVICE_ACCESS_TOKEN` 与客户端输入不一致      |
+| 403                      | 客户端 Origin 不在 `ALLOWED_ORIGINS`，添加精确 Origin    |
+| 502/503                  | 服务正在启动、崩溃或上游未配置                           |
+| 健康检查失败但业务 401   | `/healthz` 不应鉴权，检查反向代理路径                    |
+| AI 设置待配置            | 基础部署的正常状态；外部 AI 尚未启用                     |
 | 运行时 AI 连接重启后消失 | Render Free 使用临时文件系统；请使用静态 `AI_*` 环境变量 |
 
 ## 9. 真实联调
