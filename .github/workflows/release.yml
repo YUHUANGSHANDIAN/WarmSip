@@ -239,9 +239,9 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download "$GITHUB_REF_NAME" --dir downloaded --pattern 'SHA256SUMS-*'
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir downloaded --pattern 'SHA256SUMS-*'
           cat downloaded/SHA256SUMS-* | sort -k2 > SHA256SUMS
-          gh release upload "$GITHUB_REF_NAME" SHA256SUMS
+          gh release upload "$GITHUB_REF_NAME" SHA256SUMS --repo "$GITHUB_REPOSITORY"
 
   verify-release:
     needs: [prepare, checksums]
@@ -255,6 +255,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download "$GITHUB_REF_NAME" --dir downloaded
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir downloaded
           cd downloaded
           sha256sum -c SHA256SUMS
