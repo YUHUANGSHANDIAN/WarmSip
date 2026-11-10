@@ -1,16 +1,16 @@
 # WarmSip AI 架构与安全
 
-WarmSip 0.2.0-beta.3 固定使用 MIT 许可的 `@earendil-works/pi-ai@1.5.0`。pi SDK 只在 Node/Fastify 服务中运行，不进入 Web/PWA 或原生 WebView 客户端包。服务提供统一模型目录、显式任务路由、流式生成、取消、Token 与费用报告和标准错误。
+WarmSip 0.2.0-beta.4 固定使用 MIT 许可的 `@earendil-works/pi-ai@1.5.0`。pi SDK 只在 Node/Fastify 服务中运行，不进入 Web/PWA 或原生 WebView 客户端包。服务提供统一模型目录、显式任务路由、流式生成、取消、Token 与费用报告和标准错误。
 
 ## 连接方式
 
-| 方式 | 本版状态 | 凭证位置 |
-| --- | --- | --- |
-| API Key / BYOK | 支持 OpenAI、Anthropic、Google、DeepSeek、OpenRouter、Moonshot、MiniMax | 单租户服务加密文件 |
-| DeepSeek 服务端环境 | `AI_BASE_URL`、`AI_MODEL`、`AI_API_KEY` 同时配置时启用 | 仅服务端进程内存 |
-| OpenRouter OAuth | 支持，需服务商允许并完成浏览器授权 | 单租户服务加密文件 |
-| 其他 OAuth | 本版隐藏或标记不可用 | 不使用 |
-| Ollama / LM Studio / 私有兼容服务 | 支持，需服务端显式允许一个精确端点 | 服务端配置与加密文件 |
+| 方式                              | 本版状态                                                                | 凭证位置             |
+| --------------------------------- | ----------------------------------------------------------------------- | -------------------- |
+| API Key / BYOK                    | 支持 OpenAI、Anthropic、Google、DeepSeek、OpenRouter、Moonshot、MiniMax | 单租户服务加密文件   |
+| DeepSeek 服务端环境               | `AI_BASE_URL`、`AI_MODEL`、`AI_API_KEY` 同时配置时启用                  | 仅服务端进程内存     |
+| OpenRouter OAuth                  | 支持，需服务商允许并完成浏览器授权                                      | 单租户服务加密文件   |
+| 其他 OAuth                        | 本版隐藏或标记不可用                                                    | 不使用               |
+| Ollama / LM Studio / 私有兼容服务 | 支持，需服务端显式允许一个精确端点                                      | 服务端配置与加密文件 |
 
 pi 支持某种 OAuth Provider，不代表任意第三方应用获准复用该订阅。WarmSip 不会读取 Codex、pi、ChatGPT、Claude、浏览器或其他应用的登录缓存，也不会把订阅宣传为 API 免费额度。
 

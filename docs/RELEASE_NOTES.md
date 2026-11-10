@@ -1,4 +1,4 @@
-WarmSip 0.2.0-beta.3 预发布：在同一 pi-ai 执行链中接通服务端环境 DeepSeek，完善高德 POI 2.0、地理编码、天气缓存、目标城市和 JS 底图配置；增加真实取消、可核对来源与有限次数真实联调工具。
+WarmSip 0.2.0-beta.4 预发布：在同一 pi-ai 执行链中接通服务端环境 DeepSeek，完善高德 POI 2.0、地理编码、天气缓存、目标城市和 JS 底图配置；修复 Android 进程重启后地点详情自动化的重渲染竞态，并收紧公开仓库 CI 与 Release 门禁。
 
 在线 AI 使用 pi AI 1.5.0 的可配置单租户服务，支持服务端环境 DeepSeek、加密运行时 BYOK、OpenRouter OAuth 和私有兼容端点；凭证不会进入客户端包或备份。Render Free 的静态 DeepSeek 在休眠重启后仍可从环境变量恢复，进程内用量与诊断时间不会持久保存。
 

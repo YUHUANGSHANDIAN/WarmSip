@@ -1,16 +1,16 @@
 # 在线服务真实联调
 
-WarmSip 0.2.0-beta.3 把 DeepSeek、高德 Web 服务与高德 JS API 分成独立能力。配置存在只表示服务端可尝试调用；只有真实请求返回验证过的数据后才能标记为“联调成功”。
+WarmSip 0.2.0-beta.4 把 DeepSeek、高德 Web 服务与高德 JS API 分成独立能力。配置存在只表示服务端可尝试调用；只有真实请求返回验证过的数据后才能标记为“联调成功”。
 
 ## 能力矩阵
 
-| 能力 | 环境变量 | 客户端可见数据 | 真实成功标准 |
-| --- | --- | --- | --- |
-| DeepSeek 选礼与文案 | `AI_BASE_URL`、`AI_MODEL`、`AI_API_KEY` | Provider、模型、流事件、usage、软预算 | `/api/v1/ai/stream` 返回 start、结构化 result、usage 和 done |
-| 高德 POI | `AMAP_WEB_SERVICE_KEY` | POI ID、名称、地址、城市、GCJ-02 坐标 | `status=1` 且返回非空地点 |
-| 高德地理编码 | `AMAP_WEB_SERVICE_KEY` | 地址、城市和坐标 | `status=1` 且坐标有效 |
-| 高德实时天气 | `AMAP_WEB_SERVICE_KEY` | adcode、天气、温度、reporttime、缓存状态 | `status=1` 且天气数组非空 |
-| 高德交互底图 | `AMAP_JS_KEY`、`AMAP_SECURITY_CODE` | JS Key 与签名代理地址 | JS SDK 加载、地图瓦片/代理请求成功 |
+| 能力                | 环境变量                                | 客户端可见数据                           | 真实成功标准                                                 |
+| ------------------- | --------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ |
+| DeepSeek 选礼与文案 | `AI_BASE_URL`、`AI_MODEL`、`AI_API_KEY` | Provider、模型、流事件、usage、软预算    | `/api/v1/ai/stream` 返回 start、结构化 result、usage 和 done |
+| 高德 POI            | `AMAP_WEB_SERVICE_KEY`                  | POI ID、名称、地址、城市、GCJ-02 坐标    | `status=1` 且返回非空地点                                    |
+| 高德地理编码        | `AMAP_WEB_SERVICE_KEY`                  | 地址、城市和坐标                         | `status=1` 且坐标有效                                        |
+| 高德实时天气        | `AMAP_WEB_SERVICE_KEY`                  | adcode、天气、温度、reporttime、缓存状态 | `status=1` 且天气数组非空                                    |
+| 高德交互底图        | `AMAP_JS_KEY`、`AMAP_SECURITY_CODE`     | JS Key 与签名代理地址                    | JS SDK 加载、地图瓦片/代理请求成功                           |
 
 Web 服务 Key 不能代替 JS API Key。JS Key 可以在限制来源后下发；安全密钥只留在服务端代理。评分、价格、营业状态和距离只在提供方实际返回时展示。
 

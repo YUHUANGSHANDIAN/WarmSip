@@ -212,11 +212,9 @@ function clickHref(selector, fragment) {
   const element = [...document.querySelectorAll(selector)].find((item) =>
     item.getAttribute("href")?.includes(fragment),
   );
-  if (!element)
-    throw new Error(
-      `Missing ${selector} with href ${fragment}; current hash ${location.hash}`,
-    );
+  if (!element) return false;
   element.click();
+  return true;
 }
 
 function fillField(label, value) {
@@ -328,12 +326,7 @@ try {
       (h) => h.textContent.trim() === "Android 暖迹验收",
     ),
   );
-  await session.waitFor(() =>
-    [...document.querySelectorAll("a")].some((a) =>
-      a.getAttribute("href")?.includes("/places/"),
-    ),
-  );
-  await session.evaluate(clickHref, "a", "/places/");
+  await session.waitFor(clickHref, "a", "/places/");
   await session.waitFor(
     () =>
       document.querySelectorAll('button[aria-label="移除此照片"]').length === 1,
