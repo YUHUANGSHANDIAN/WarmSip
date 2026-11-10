@@ -61,7 +61,7 @@ jobs:
       - run: node scripts/package.mjs web
       - run: node scripts/checksums.mjs --out=artifacts/web/SHA256SUMS-web artifacts/web
       - run: node scripts/checksums.mjs --verify --out=artifacts/web/SHA256SUMS-web
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           {
             name: release-web,
@@ -137,7 +137,7 @@ jobs:
       - run: node scripts/package.mjs desktop ${{ matrix.platform }} src-tauri/target/${{ matrix.target }}/release/bundle
       - run: node scripts/checksums.mjs --out=artifacts/${{ matrix.platform }}/SHA256SUMS-${{ matrix.platform }} artifacts/${{ matrix.platform }}
       - run: node scripts/checksums.mjs --verify --out=artifacts/${{ matrix.platform }}/SHA256SUMS-${{ matrix.platform }}
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-${{ matrix.platform }}
           path: artifacts/${{ matrix.platform }}
@@ -176,7 +176,7 @@ jobs:
           cores: 4
           ram-size: 4096M
           script: node scripts/android-smoke.mjs
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           {
             name: release-android,
@@ -185,7 +185,7 @@ jobs:
             retention-days: 2,
           }
       - if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           {
             name: android-evidence,
