@@ -129,7 +129,7 @@ export function SettingsPage() {
             本地使用 · 无需账号 · 地图默认私人
           </p>
         </div>
-        <Badge tone="warm">0.2.0-beta.2 预发布版</Badge>
+        <Badge tone="warm">0.2.0-beta.3 预发布版</Badge>
       </div>
       <div className="settings-shortcuts">
         <Link to="/profiles">
@@ -346,14 +346,36 @@ export function SettingsPage() {
         {capabilities && (
           <div className="capabilities">
             {[
-              { name: "AI 选礼", ready: capabilities.ai },
-              { name: "地点搜索", ready: capabilities.places },
-              { name: "天气", ready: capabilities.weather },
-              { name: "地图底图", ready: capabilities.map },
+              {
+                name: "DeepSeek AI",
+                ready: capabilities.ai,
+                detail: capabilities.details.ai,
+              },
+              {
+                name: "高德地点",
+                ready: capabilities.places,
+                detail: capabilities.details.places,
+              },
+              {
+                name: "高德天气",
+                ready: capabilities.weather,
+                detail: capabilities.details.weather,
+              },
+              {
+                name: "交互底图",
+                ready: capabilities.map,
+                detail: capabilities.details.map,
+              },
             ].map((c) => (
               <Badge key={c.name} tone={c.ready ? "sage" : "neutral"}>
                 {c.ready && <Check size={12} />} {c.name}：
-                {c.ready ? "服务已配置，需实际联调" : "尚未配置"}
+                {c.detail.lastSuccessAt
+                  ? `最近调用成功 · ${new Date(c.detail.lastSuccessAt).toLocaleString("zh-CN")}`
+                  : c.ready
+                    ? "已配置，待本次真实调用验证"
+                    : c.detail.lastErrorCode
+                      ? `未通过 · ${c.detail.lastErrorCode}`
+                      : "尚未配置"}
               </Badge>
             ))}
           </div>

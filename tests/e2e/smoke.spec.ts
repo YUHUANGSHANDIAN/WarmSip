@@ -38,6 +38,140 @@ test("档案、城市优先级、本地推荐和心意保存", async ({ page }) 
   await expect(page.getByText(/日常关心 · 成都/)).toBeVisible();
 });
 
+test("设置页核对服务端 DeepSeek、高德和真实调用状态", async ({ page }) => {
+  const detail = (source: string) => ({
+    configured: true,
+    source,
+    lastSuccessAt: 1_790_000_000_000,
+    lastCheckedAt: 1_790_000_000_000,
+    lastErrorCode: "",
+  });
+  const cors = {
+    "access-control-allow-origin": "http://127.0.0.1:1421",
+  };
+  await page.route("https://service.example.test/healthz", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: cors,
+      body: JSON.stringify({ ok: true, version: "0.2.0-beta.3" }),
+    }),
+  );
+  await page.route(
+    "https://service.example.test/api/v1/capabilities",
+    (route) => {
+      if (route.request().method() === "OPTIONS")
+        return route.fulfill({
+          status: 204,
+          headers: {
+            ...cors,
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-headers": "Authorization, Content-Type",
+          },
+        });
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: cors,
+        body: JSON.stringify({
+          ai: true,
+          places: true,
+          weather: true,
+          map: true,
+          mapJsKey: "test-public-key",
+          mapProxyUrl: "/api/v1/map-proxy/test",
+          details: {
+            ai: detail("DeepSeek · 服务端环境"),
+            places: detail("高德 Web 服务"),
+            weather: detail("高德天气"),
+            map: detail("高德 JS API"),
+          },
+        }),
+      });
+    },
+  );
+  await page.route(
+    "https://service.example.test/api/v1/ai/state",
+    (route) => {
+      if (route.request().method() === "OPTIONS")
+        return route.fulfill({
+          status: 204,
+          headers: {
+            ...cors,
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-headers": "Authorization, Content-Type",
+          },
+        });
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: cors,
+        body: JSON.stringify({
+          available: true,
+          credentialManagementReady: false,
+          persistence: "process-memory",
+          connections: [
+            {
+              id: "deepseek-env",
+              providerId: "deepseek",
+              origin: "environment",
+              managedByService: true,
+              label: "DeepSeek · 服务端环境",
+              authType: "api-key",
+              baseUrl: "https://api.deepseek.com",
+              enabled: true,
+              status: "connected",
+              maskedCredential: "由服务端环境管理",
+              modelCount: 1,
+              modelIds: ["deepseek-flash"],
+              lastCheckedAt: 1_790_000_000_000,
+              lastError: "",
+              createdAt: 1_790_000_000_000,
+              updatedAt: 1_790_000_000_000,
+            },
+          ],
+          models: [
+            {
+              providerId: "deepseek",
+              id: "deepseek-flash",
+              name: "DeepSeek V4.1 Flash",
+              input: ["text"],
+              reasoning: true,
+            },
+          ],
+          routes: [
+            {
+              taskId: "gift",
+              connectionId: "deepseek-env",
+              modelId: "deepseek-flash",
+            },
+          ],
+          usage: {
+            todayCalls: 1,
+            monthCalls: 1,
+            todayCostUsd: 0.0001,
+            monthCostUsd: 0.0001,
+            recent: [],
+          },
+          privacy: {
+            singleTenant: true,
+            message: "单可信管理域",
+          },
+        }),
+      });
+    },
+  );
+  await page.goto("/#/settings");
+  await page.getByLabel("服务地址").fill("https://service.example.test");
+  await page.getByLabel("服务访问令牌").fill("test-access-token-1234567890");
+  await page.getByRole("button", { name: "保存并检查连接" }).click();
+  await expect(page.getByText(/DeepSeek AI：最近调用成功/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "DeepSeek · 服务端环境" }))
+    .toBeVisible();
+  await expect(page.getByText(/服务端环境 · 只读/)).toBeVisible();
+  await expect(page.getByText(/本次服务进程内保留/)).toBeVisible();
+});
+
 async function createMap(page: Page, title: string) {
   await page.goto("/#/maps/new");
   await page.getByLabel("地图名称").fill(title);

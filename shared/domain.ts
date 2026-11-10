@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const VERSION = "0.2.0-beta.2";
+export const VERSION = "0.2.0-beta.3";
 const text = z.string().trim();
 const timestamp = z.number().int().nonnegative();
 export const dateOnly = z.string().refine((s) => {
@@ -244,12 +244,25 @@ export const poiSchema = z.object({
 export type Poi = z.infer<typeof poiSchema>;
 export const weatherSchema = z.object({
   city: z.string(),
+  adcode: z.string().default(""),
   condition: z.string(),
   temperature: z.string(),
   reportedAt: z.string(),
+  fetchedAt: z.number().int().nonnegative(),
+  cacheStatus: z.enum(["fresh", "cached", "stale"]).default("fresh"),
   source: z.literal("高德地图"),
 });
 export type Weather = z.infer<typeof weatherSchema>;
+export const providerCapabilityStatusSchema = z.object({
+  configured: z.boolean(),
+  source: z.string().default(""),
+  lastSuccessAt: timestamp.nullable().default(null),
+  lastCheckedAt: timestamp.nullable().default(null),
+  lastErrorCode: z.string().default(""),
+});
+export type ProviderCapabilityStatus = z.infer<
+  typeof providerCapabilityStatusSchema
+>;
 export interface Capabilities {
   ai: boolean;
   places: boolean;
@@ -257,6 +270,12 @@ export interface Capabilities {
   map: boolean;
   mapJsKey: string;
   mapProxyUrl: string;
+  details: {
+    ai: ProviderCapabilityStatus;
+    places: ProviderCapabilityStatus;
+    weather: ProviderCapabilityStatus;
+    map: ProviderCapabilityStatus;
+  };
 }
 export function newEntity() {
   const now = Date.now();

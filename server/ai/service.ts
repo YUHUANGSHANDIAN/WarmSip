@@ -22,6 +22,7 @@ import {
   aiConnectionInputSchema,
   aiRunRequestSchema,
   aiStateSchema,
+  aiTaskIds,
   aiCityGuideResultSchema,
   aiCopywritingResultSchema,
   aiMapIntentResultSchema,
@@ -34,6 +35,7 @@ import {
   type AIStreamEvent,
   type AITaskId,
   type AITaskRoute,
+  type AIUsageRecord,
 } from "../../shared/ai.js";
 import {
   recommendationResultSchema,
@@ -112,6 +114,19 @@ function cleanJson(text: string) {
   return JSON.parse(fenced.slice(start, end + 1));
 }
 
+function classifyAIError(message: string, cancelled: boolean) {
+  if (cancelled) return { code: "CANCELLED", message: "生成已取消" };
+  if (/\b401\b|unauthori[sz]ed|invalid api key/i.test(message))
+    return { code: "INVALID_CREDENTIAL", message: "AI 凭证无效，请检查服务端配置" };
+  if (/\b402\b|insufficient balance|quota exceeded/i.test(message))
+    return { code: "INSUFFICIENT_BALANCE", message: "AI 账户余额或额度不足" };
+  if (/\b429\b|rate limit|too many requests/i.test(message))
+    return { code: "RATE_LIMITED", message: "AI 服务请求过于频繁，请稍后重试" };
+  if (/timeout|timed out|abort/i.test(message))
+    return { code: "UPSTREAM_TIMEOUT", message: "AI 服务响应超时" };
+  return { code: "UPSTREAM_ERROR", message: "AI 服务暂不可用" };
+}
+
 function isPrivateAddress(address: string) {
   const value = address.toLowerCase().replace(/^\[|\]$/g, "");
   if (isIP(value) === 4) {
@@ -172,11 +187,22 @@ export interface AIServiceOptions {
   allowLocalEndpoints: boolean;
   allowedLocalEndpoints?: string[];
   extraProviders?: Provider[];
+  staticConnection?: {
+    apiKey: string;
+    baseUrl: string;
+    modelId: string;
+  };
 }
 
 export class AIService {
   readonly store?: FileCredentialStore;
   private models?: MutableModels;
+  private readonly startedAt = Date.now();
+  private memoryUsage: AIUsageRecord[] = [];
+  private staticStatus: "configured" | "connected" | "error" = "configured";
+  private staticLastCheckedAt: number | null = null;
+  private staticLastError = "";
+  private staticLastSuccessAt: number | null = null;
   private oauthFlows = new Map<
     string,
     {
@@ -194,47 +220,104 @@ export class AIService {
   }
 
   private async collection() {
-    if (!this.store) return undefined;
+    if (!this.store && !this.options.staticConnection) return undefined;
     if (this.models) return this.models;
     const models = createModels({
-      credentials: this.store,
+      ...(this.store ? { credentials: this.store } : {}),
       identity: {
         userAgent: "short",
-        version: "0.2.0-beta.2",
+        version: "0.2.0-beta.3",
         attribution: null,
       },
     });
     for (const factory of builtins.values()) models.setProvider(factory());
     for (const provider of this.options.extraProviders || [])
       models.setProvider(provider);
-    for (const connection of await this.store.connections()) {
-      if (connection.providerId !== "custom" || !connection.enabled) continue;
-      if (models.getProvider(connection.id)) continue;
-      const modelsForProvider = (await this.customModels(connection)).map((model) => ({
-        ...model,
-        provider: connection.id,
-      }));
-      if (!modelsForProvider.length) continue;
-      const provider = createProvider({
-        id: connection.id,
-        name: connection.label,
-        baseUrl: connection.baseUrl,
-        auth: {
-          apiKey: {
-            name: connection.label,
-            resolve: async ({ credential }) => {
-              const key = credential?.key?.trim();
-              return { auth: key ? { apiKey: key } : {} };
+    if (this.store) {
+      for (const connection of await this.store.connections()) {
+        if (connection.providerId !== "custom" || !connection.enabled) continue;
+        if (models.getProvider(connection.id)) continue;
+        const modelsForProvider = (await this.customModels(connection)).map(
+          (model) => ({
+            ...model,
+            provider: connection.id,
+          }),
+        );
+        if (!modelsForProvider.length) continue;
+        const provider = createProvider({
+          id: connection.id,
+          name: connection.label,
+          baseUrl: connection.baseUrl,
+          auth: {
+            apiKey: {
+              name: connection.label,
+              resolve: async ({ credential }) => {
+                const key = credential?.key?.trim();
+                return { auth: key ? { apiKey: key } : {} };
+              },
             },
           },
-        },
-        models: modelsForProvider,
-        api: openAICompletionsApi(),
-      });
-      models.setProvider(provider);
+          models: modelsForProvider,
+          api: openAICompletionsApi(),
+        });
+        models.setProvider(provider);
+      }
     }
     this.models = models;
     return models;
+  }
+
+  private staticConnection(): AIConnection | undefined {
+    const configured = this.options.staticConnection;
+    if (!configured) return undefined;
+    return {
+      id: "deepseek-env",
+      providerId: "deepseek",
+      origin: "environment",
+      managedByService: true,
+      label: "DeepSeek · 服务端环境",
+      authType: "api-key",
+      baseUrl: configured.baseUrl,
+      enabled: true,
+      status: this.staticStatus,
+      maskedCredential: "由服务端环境管理",
+      modelCount: 1,
+      modelIds: [configured.modelId],
+      lastCheckedAt: this.staticLastCheckedAt,
+      lastError: this.staticLastError,
+      createdAt: this.startedAt,
+      updatedAt: this.staticLastCheckedAt || this.startedAt,
+    };
+  }
+
+  private staticRoutes(): AITaskRoute[] {
+    const configured = this.options.staticConnection;
+    if (!configured) return [];
+    return aiTaskIds.map((taskId) => ({
+      taskId,
+      connectionId: "deepseek-env",
+      modelId: configured.modelId,
+    }));
+  }
+
+  private modelForConnection(
+    models: MutableModels,
+    connection: AIConnection,
+    modelId: string,
+  ) {
+    return models.getModel(
+      connection.providerId === "custom" ? connection.id : connection.providerId,
+      modelId,
+    );
+  }
+
+  private async recordUsage(record: AIUsageRecord) {
+    if (this.store) {
+      await this.store.addUsage(record);
+      return;
+    }
+    this.memoryUsage.push(record);
+    this.memoryUsage = this.memoryUsage.slice(-1000);
   }
 
   private async customModels(connection: AIConnection) {
@@ -318,6 +401,8 @@ export class AIService {
       const connection = {
         id,
         providerId: parsed.providerId,
+        origin: "runtime" as const,
+        managedByService: false,
         label: parsed.label,
         authType: parsed.authType,
         baseUrl,
@@ -354,6 +439,8 @@ export class AIService {
     const connection = {
       id: parsed.providerId,
       providerId: parsed.providerId,
+      origin: "runtime" as const,
+      managedByService: false,
       label: parsed.label || providerLabels[parsed.providerId],
       authType: parsed.authType,
       baseUrl: "",
@@ -378,10 +465,60 @@ export class AIService {
 
   async testConnection(id: string) {
     const models = await this.collection();
-    const connection = (await this.store?.connections())?.find((x) => x.id === id);
-    if (!models || !this.store || !connection)
+    const runtimeConnection = (await this.store?.connections())?.find(
+      (connection) => connection.id === id,
+    );
+    const connection =
+      this.staticConnection()?.id === id
+        ? this.staticConnection()
+        : runtimeConnection;
+    if (!models || !connection)
       throw new AIStoreError("NOT_FOUND", "AI 连接不存在");
     try {
+      if (connection.origin === "environment") {
+        const configured = this.options.staticConnection!;
+        const model = this.modelForConnection(
+          models,
+          connection,
+          configured.modelId,
+        );
+        if (!model)
+          throw new AIStoreError("MODEL_NOT_FOUND", "服务端配置的模型不存在");
+        const probe = await models.complete(
+          model,
+          {
+            systemPrompt: "Reply with OK only.",
+            messages: [
+              {
+                role: "user",
+                content: "Connection test",
+                timestamp: Date.now(),
+              },
+            ],
+          },
+          {
+            apiKey: configured.apiKey,
+            signal: AbortSignal.timeout(20000),
+            maxTokens: 8,
+          },
+        );
+        if (probe.stopReason === "error" || probe.stopReason === "aborted")
+          throw new Error(probe.errorMessage || "模型探针失败");
+        this.staticStatus = "connected";
+        this.staticLastCheckedAt = Date.now();
+        this.staticLastSuccessAt = this.staticLastCheckedAt;
+        this.staticLastError = "";
+        return {
+          status: "connected" as const,
+          modelCount: 1,
+          source: "AI_API_KEY",
+        };
+      }
+      if (!this.store)
+        throw new AIStoreError(
+          "NOT_CONFIGURED",
+          "运行时 AI 凭证存储未配置",
+        );
       const auth = await models.checkAuth(id, { signal: AbortSignal.timeout(15000) });
       if (!auth) throw new Error("凭证未配置");
       const available = await models.getAvailable(id, {
@@ -410,18 +547,32 @@ export class AIService {
         source: auth.source || auth.type,
       };
     } catch {
-      await this.store.updateConnection(id, {
-        status: "error",
-        lastCheckedAt: Date.now(),
-        lastError: "凭证或模型服务不可用",
-      });
+      if (connection.origin === "environment") {
+        this.staticStatus = "error";
+        this.staticLastCheckedAt = Date.now();
+        this.staticLastError = "凭证或模型服务不可用";
+      }
+      if (this.store && runtimeConnection)
+        await this.store.updateConnection(id, {
+          status: "error",
+          lastCheckedAt: Date.now(),
+          lastError: "凭证或模型服务不可用",
+        });
       throw new AIStoreError("CONNECTION_FAILED", "连接测试失败，请检查凭证和网络");
     }
   }
 
   async refreshModels(id?: string) {
     const models = await this.collection();
-    if (!models || !this.store) throw new AIStoreError("NOT_CONFIGURED", "AI 服务未配置");
+    if (!models) throw new AIStoreError("NOT_CONFIGURED", "AI 服务未配置");
+    if (id === this.staticConnection()?.id)
+      return {
+        refreshed: [id],
+        unavailable: [],
+        source: "environment",
+      };
+    if (!this.store)
+      throw new AIStoreError("NOT_CONFIGURED", "运行时 AI 凭证存储未配置");
     const result = await models.refresh({
       providers: id ? [id] : undefined,
       force: true,
@@ -442,6 +593,12 @@ export class AIService {
   async modelsForConnection(connection?: AIConnection) {
     const models = await this.collection();
     if (!models) return [];
+    if (connection?.origin === "environment") {
+      return models
+        .getModels(connection.providerId)
+        .filter((model) => connection.modelIds.includes(model.id))
+        .map(modelDescriptor);
+    }
     const ids = connection ? [connection.id] : builtins.keys();
     const output: AIModelDescriptor[] = [];
     for (const id of ids) {
@@ -460,14 +617,26 @@ export class AIService {
   }
 
   async state(): Promise<AIState> {
-    const connections = this.store ? await this.store.connections() : [];
+    const runtimeConnections = this.store ? await this.store.connections() : [];
+    const staticConnection = this.staticConnection();
+    const connections = [
+      ...(staticConnection ? [staticConnection] : []),
+      ...runtimeConnections,
+    ];
     const allModels: AIModelDescriptor[] = [];
     for (const connection of connections) {
       if (!connection.enabled) continue;
       allModels.push(...(await this.modelsForConnection(connection)));
     }
-    const routes = this.store ? await this.store.routes() : [];
-    const records = this.store ? await this.store.usage() : [];
+    const runtimeRoutes = this.store ? await this.store.routes() : [];
+    const routes = [
+      ...this.staticRoutes().filter(
+        (fallback) =>
+          !runtimeRoutes.some((route) => route.taskId === fallback.taskId),
+      ),
+      ...runtimeRoutes,
+    ];
+    const records = this.store ? await this.store.usage() : this.memoryUsage;
     const now = new Date();
     const day = now.toISOString().slice(0, 10);
     const month = day.slice(0, 7);
@@ -480,14 +649,18 @@ export class AIService {
     );
     return aiStateSchema.parse({
       available:
-        Boolean(this.store) &&
         connections.some(
           (x) =>
             x.enabled &&
-            x.status === "connected" &&
-            allModels.some((m) => m.providerId === x.id),
+            (x.origin === "environment" || x.status === "connected") &&
+            allModels.some(
+              (model) =>
+                model.providerId ===
+                (x.providerId === "custom" ? x.id : x.providerId),
+            ),
         ),
       credentialManagementReady: Boolean(this.store),
+      persistence: this.store ? "encrypted-file" : "process-memory",
       connections,
       models: allModels,
       routes,
@@ -507,33 +680,48 @@ export class AIService {
   }
 
   async setRoutes(input: unknown) {
-    if (!this.store) throw new AIStoreError("NOT_CONFIGURED", "AI 服务未配置");
     const { routes } = aiTaskRoutesInputSchema.parse(input);
     if (new Set(routes.map((route) => route.taskId)).size !== routes.length)
       throw new AIStoreError("INVALID_ROUTE", "同一任务只能绑定一个模型");
-    const connections = await this.store.connections();
+    const connections = [
+      ...(this.staticConnection() ? [this.staticConnection()!] : []),
+      ...(this.store ? await this.store.connections() : []),
+    ];
     const models = await this.collection();
     for (const route of routes) {
-      if (!connections.some((x) => x.id === route.connectionId && x.enabled))
+      const connection = connections.find(
+        (item) => item.id === route.connectionId && item.enabled,
+      );
+      if (!connection)
         throw new AIStoreError("INVALID_ROUTE", "任务路由引用了不可用连接");
-      if (!models?.getModel(route.connectionId, route.modelId))
+      if (!models || !this.modelForConnection(models, connection, route.modelId))
         throw new AIStoreError("MODEL_NOT_FOUND", "任务路由引用了不存在的模型");
     }
+    if (!this.store) return routes;
     return this.store.setRoutes(routes);
   }
 
   async removeConnection(id: string) {
+    if (id === this.staticConnection()?.id)
+      throw new AIStoreError(
+        "MANAGED_BY_SERVICE",
+        "此连接由服务端环境变量管理，不能在客户端移除",
+      );
     if (!this.store) throw new AIStoreError("NOT_CONFIGURED", "AI 服务未配置");
     await this.store.removeConnection(id);
     this.models = undefined;
   }
 
   async clearUsage() {
-    if (!this.store) return;
+    if (!this.store) {
+      this.memoryUsage = [];
+      return;
+    }
     await this.store.clearUsage();
   }
 
   async clearAll() {
+    this.memoryUsage = [];
     if (!this.store) return;
     for (const connection of await this.store.connections())
       await this.store.removeConnection(connection.id);
@@ -549,12 +737,22 @@ export class AIService {
   async *stream(input: unknown, signal: AbortSignal): AsyncGenerator<AIStreamEvent> {
     const request = aiRunRequestSchema.parse(input);
     const models = await this.collection();
-    if (!models || !this.store)
-      throw new AIStoreError("NOT_CONFIGURED", "AI 服务尚未配置");
-    const routes = await this.store.routes();
-    const route = this.route(request.taskId, routes);
+    if (!models) throw new AIStoreError("NOT_CONFIGURED", "AI 服务尚未配置");
+    const runtimeRoutes = this.store ? await this.store.routes() : [];
+    const route =
+      this.route(request.taskId, runtimeRoutes) ||
+      this.route(request.taskId, this.staticRoutes());
     if (!route) throw new AIStoreError("NO_ROUTE", "此任务尚未选择 AI 模型");
-    const usageRecords = await this.store.usage();
+    const connections = [
+      ...(this.staticConnection() ? [this.staticConnection()!] : []),
+      ...(this.store ? await this.store.connections() : []),
+    ];
+    const connection = connections.find(
+      (item) => item.id === route.connectionId && item.enabled,
+    );
+    if (!connection)
+      throw new AIStoreError("MODEL_NOT_FOUND", "任务路由引用了不可用连接");
+    const usageRecords = this.store ? await this.store.usage() : this.memoryUsage;
     const now = new Date();
     const day = now.toISOString().slice(0, 10);
     const month = day.slice(0, 7);
@@ -580,11 +778,23 @@ export class AIService {
         "BUDGET_EXCEEDED",
         "已达到应用内 AI 软预算，请调整预算或使用本地功能",
       );
-    const model = models.getModel(route.connectionId, route.modelId);
+    const model = this.modelForConnection(
+      models,
+      connection,
+      route.modelId,
+    );
     if (!model) throw new AIStoreError("MODEL_NOT_FOUND", "所选模型不存在，请刷新模型目录");
     const runId = newAIUsageId();
     const startedAt = Date.now();
     const prompt = taskPrompts[request.taskId];
+    const maxTokens: Record<AITaskId, number> = {
+      gift: 700,
+      copywriting: 320,
+      "map-intent": 240,
+      "city-guide": 600,
+      story: 900,
+      vision: 900,
+    };
     let text = "";
     let usage: {
       inputTokens: number;
@@ -616,7 +826,13 @@ export class AIService {
           },
         ],
       },
-      { signal, maxTokens: 1800 },
+      {
+        signal,
+        maxTokens: maxTokens[request.taskId],
+        ...(connection.origin === "environment" && this.options.staticConnection
+          ? { apiKey: this.options.staticConnection.apiKey }
+          : {}),
+      },
     );
     try {
       for await (const event of stream) {
@@ -624,9 +840,13 @@ export class AIService {
           text += event.delta;
           yield { type: "delta", delta: event.delta };
         } else if (event.type === "error") {
+          const classified = classifyAIError(
+            event.error.errorMessage || "",
+            event.reason === "aborted",
+          );
           throw new AIStoreError(
-            event.reason === "aborted" ? "CANCELLED" : "UPSTREAM_ERROR",
-            event.reason === "aborted" ? "生成已取消" : "AI 服务暂不可用",
+            classified.code,
+            classified.message,
           );
         }
       }
@@ -653,7 +873,13 @@ export class AIService {
       yield { type: "result", payload: validated };
       yield { type: "usage", ...usage };
       yield { type: "done" };
-      await this.store.addUsage({
+      if (connection.origin === "environment") {
+        this.staticStatus = "connected";
+        this.staticLastSuccessAt = Date.now();
+        this.staticLastCheckedAt = this.staticLastSuccessAt;
+        this.staticLastError = "";
+      }
+      await this.recordUsage({
         id: runId,
         taskId: request.taskId,
         providerId: model.provider,
@@ -668,13 +894,19 @@ export class AIService {
       });
     } catch (error) {
       const cancelled = signal.aborted;
-      const code =
+      const classified =
         error instanceof AIStoreError
-          ? error.code
-          : cancelled
-            ? "CANCELLED"
-            : "UPSTREAM_ERROR";
-      await this.store.addUsage({
+          ? { code: error.code, message: error.message }
+          : classifyAIError(
+              error instanceof Error ? error.message : "",
+              cancelled,
+            );
+      if (connection.origin === "environment" && !cancelled) {
+        this.staticStatus = "error";
+        this.staticLastCheckedAt = Date.now();
+        this.staticLastError = classified.message;
+      }
+      await this.recordUsage({
         id: runId,
         taskId: request.taskId,
         providerId: model.provider,
@@ -683,20 +915,16 @@ export class AIService {
         status: cancelled ? "cancelled" : "failed",
         ...usage,
         durationMs: Date.now() - startedAt,
-        errorCode: code,
+        errorCode: classified.code,
         startedAt,
         finishedAt: Date.now(),
       });
       yield {
         type: "error",
-        code,
-        message:
-          error instanceof AIStoreError
-            ? error.message
-            : cancelled
-              ? "生成已取消"
-              : "AI 服务暂不可用",
+        code: classified.code,
+        message: classified.message,
       };
+      yield { type: "done", cancelled };
     }
   }
 
@@ -735,6 +963,8 @@ export class AIService {
           {
             id: "openrouter",
             providerId: "openrouter",
+            origin: "runtime",
+            managedByService: false,
             label: "OpenRouter",
             authType: "oauth",
             baseUrl: "",
@@ -769,20 +999,4 @@ export class AIService {
     return flow;
   }
 
-  async maybeConfigureSeed() {
-    const base = process.env.AI_BASE_URL?.trim();
-    const key = process.env.AI_API_KEY?.trim();
-    const model = process.env.AI_MODEL?.trim();
-    if (!this.store || !base || !key || !model) return;
-    const existing = await this.store.connections();
-    if (existing.some((x) => x.providerId === "custom")) return;
-    await this.saveConnection({
-      providerId: "custom",
-      label: "环境变量模型",
-      authType: "api-key",
-      baseUrl: base,
-      apiKey: key,
-      modelIds: [model],
-    });
-  }
 }

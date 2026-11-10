@@ -1,12 +1,13 @@
 # WarmSip AI 架构与安全
 
-WarmSip 0.2.0-beta.2 固定使用 MIT 许可的 `@earendil-works/pi-ai@1.5.0`。pi SDK 只在 Node/Fastify 服务中运行，不进入 Web/PWA 或原生 WebView 客户端包。服务提供统一模型目录、显式任务路由、流式生成、取消、Token 与费用报告和标准错误。
+WarmSip 0.2.0-beta.3 固定使用 MIT 许可的 `@earendil-works/pi-ai@1.5.0`。pi SDK 只在 Node/Fastify 服务中运行，不进入 Web/PWA 或原生 WebView 客户端包。服务提供统一模型目录、显式任务路由、流式生成、取消、Token 与费用报告和标准错误。
 
 ## 连接方式
 
 | 方式 | 本版状态 | 凭证位置 |
 | --- | --- | --- |
 | API Key / BYOK | 支持 OpenAI、Anthropic、Google、DeepSeek、OpenRouter、Moonshot、MiniMax | 单租户服务加密文件 |
+| DeepSeek 服务端环境 | `AI_BASE_URL`、`AI_MODEL`、`AI_API_KEY` 同时配置时启用 | 仅服务端进程内存 |
 | OpenRouter OAuth | 支持，需服务商允许并完成浏览器授权 | 单租户服务加密文件 |
 | 其他 OAuth | 本版隐藏或标记不可用 | 不使用 |
 | Ollama / LM Studio / 私有兼容服务 | 支持，需服务端显式允许一个精确端点 | 服务端配置与加密文件 |
@@ -22,7 +23,17 @@ cp .env.example .env
 npm run server:dev
 ```
 
-两个值都不应发送到聊天、提交到 Git 或打入客户端。远程服务必须通过 HTTPS 反向代理。Docker 部署使用 `warmsip-data` 卷保存 `/app/data/ai-store.json`，容器文件系统可保持只读。
+两个值都不应发送到聊天、提交到 Git 或打入客户端。远程服务必须通过 HTTPS 反向代理。需要运行时凭证持久保存时，Docker 部署必须给 `/app/data/ai-store.json` 使用持久卷。
+
+单 Provider 的最小 DeepSeek 配置是：
+
+```dotenv
+AI_BASE_URL=https://api.deepseek.com
+AI_MODEL=deepseek-flash
+AI_API_KEY=由用户在本机或 Render Secret 中填写
+```
+
+三项必须同时存在。`AI_MODEL` 只接受 pi-ai 1.5.0 内置的 `deepseek-flash` 与 `deepseek-v4-pro`；旧 `deepseek-chat`、`deepseek-reasoner` 会阻止启动，不做静默映射。默认连接 ID 为 `deepseek-env`，在客户端显示为服务端环境管理、不可编辑或删除。`deepseek-v4-pro` 只有在用户显式设置 `AI_MODEL` 时启用。
 
 本地模型默认关闭。只有同时设置 `ALLOW_LOCAL_AI_ENDPOINTS=true` 和精确的 `AI_ALLOWED_LOCAL_ENDPOINTS` 才可连接。远程自定义地址会解析 DNS 并拒绝私网、回环、链路本地、云元数据和非 HTTPS 地址。
 
@@ -30,7 +41,7 @@ npm run server:dev
 
 服务是单实例、单可信管理域，不提供多用户账号隔离。持有服务访问令牌的人可以管理模型连接。公开部署前应使用随机长令牌、HTTPS、反向代理来源限制和独立加密密钥。
 
-Render Free 的容器文件系统是临时的。基础服务 URL 和 Render 环境变量可跨实例重启保留，但 `/app/data/ai-store.json` 中的模型连接、加密凭证和用量会随休眠重启或重新部署丢失。零付费基础部署暂不配置 `AI_CREDENTIAL_ENCRYPTION_KEY`；不要把临时磁盘当作持久凭证库。
+Render Free 的容器文件系统是临时的。环境变量静态连接的 DeepSeek 可以在重启后恢复，但 `/app/data/ai-store.json` 中的运行时模型连接、加密凭证、诊断时间和用量会随休眠重启或重新部署丢失。零付费部署不配置 `AI_CREDENTIAL_ENCRYPTION_KEY`；不要把临时磁盘当作持久凭证库。静态模式的 usage 是进程内软账目，不是 DeepSeek 官方账单。
 
 凭证以 AES-256-GCM 保存，每个 Provider 使用独立随机 nonce 和 Provider ID 作为 AAD。文件写入采用串行读改写、同步写入与原子替换。API 响应只返回尾号掩码；连接列表不解析为明文；错误、日志和备份不包含凭证。删除连接会同时移除该连接的密文和任务路由。
 
@@ -47,10 +58,10 @@ Render Free 的容器文件系统是临时的。基础服务 URL 和 Render 环�
 
 ## 任务与错误
 
-任务包括 `gift`、`copywriting`、`map-intent`、`city-guide`、`story` 和预留的 `vision`。每个任务显式绑定 Connection/Model；无法配置时不调用其他供应商。自动跨供应商回退默认关闭。
+任务包括 `gift`、`copywriting`、`map-intent`、`city-guide`、`story` 和预留的 `vision`。环境变量连接会作为六个任务的只读默认路由；存在运行时显式路由时优先生效。所选路由失败时直接返回错误，不跨供应商重试。
 
-服务区分未配置、无路由、模型不存在、同源/令牌拒绝、限流、超时、上游错误、结构错误、取消和软预算超限。用量记录包括状态、Token、费用来源和耗时，不保存 Prompt 或生成正文。
+服务区分未配置、无路由、模型不存在、无效凭证、余额或额度不足、限流、超时、上游错误、结构错误、取消和软预算超限。用量记录包括状态、Token、费用来源和耗时，不保存 Prompt 或生成正文。每个任务的输出上限分别为：选礼 700、文案 320、地图意图 240、城市导览 600、故事与视觉 900 Token。
 
 ## 验证边界
 
-自动化使用两个独立 faux Provider 验证真实路由，不伪造生产联调结果。只有用户在设置中配置有效凭证并成功完成测试后，才可以把对应提供商标记为“真实推理通过”。测试连接会发送一次极小请求，可能产生服务商费用。
+自动化使用 faux Provider 和静态目录验证路由，不伪造生产联调结果。只有真实 `/api/v1/ai/stream` 调用返回结构化结果、模型 ID 与 usage 后，才可以把 DeepSeek 标记为“真实推理通过”。连接测试会发送一次极小请求，可能产生服务商费用；实际联调脚本默认只发起一次业务流式请求，取消探测必须显式开启。

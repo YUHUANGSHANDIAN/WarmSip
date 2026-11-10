@@ -4,6 +4,11 @@ import { join } from "node:path";
 const assets = join("dist", "assets");
 const files = await readdir(assets);
 const javascript = files.filter((file) => file.endsWith(".js"));
+const secretPatterns = [
+  /\bsk-[A-Za-z0-9_-]{20,}\b/,
+  /\bAIza[0-9A-Za-z_-]{30,}\b/,
+  /\bgh[pousr]_[A-Za-z0-9]{20,}\b/,
+];
 let total = 0;
 let largest = { file: "", bytes: 0 };
 for (const file of javascript) {
@@ -16,7 +21,13 @@ for (const file of javascript) {
     source.includes("AWS_ACCESS_KEY_ID") ||
     source.includes("OPENROUTER_API_KEY")
   )
-    throw new Error(`Server-only AI runtime leaked into client bundle: ${file}`);
+    throw new Error(
+      `Server-only AI runtime leaked into client bundle: ${file}`,
+    );
+  if (secretPatterns.some((pattern) => pattern.test(source)))
+    throw new Error(
+      `A credential-like value leaked into client bundle: ${file}`,
+    );
 }
 if (largest.bytes > 850 * 1024)
   throw new Error(

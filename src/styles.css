@@ -819,6 +819,28 @@ input[type="number"] {
 .weather-card > small {
   font-size: 9px;
 }
+.weather-context {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+.weather-context select,
+.weather-context input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid rgba(62, 81, 66, 0.24);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.55);
+  color: #314537;
+  font: inherit;
+  font-size: 12px;
+}
+.weather-context select:focus-visible,
+.weather-context input:focus-visible {
+  outline: 3px solid rgba(244, 144, 113, 0.5);
+  outline-offset: 2px;
+}
 .weather-card .text-link {
   font-size: 11px;
   color: #35613f;

@@ -28,6 +28,8 @@ function connection(id: string): AIConnection {
   return {
     id,
     providerId: "custom",
+    origin: "runtime",
+    managedByService: false,
     label: id,
     authType: "local",
     baseUrl: "",
@@ -44,6 +46,34 @@ function connection(id: string): AIConnection {
 }
 
 describe("AI credential and provider boundary", () => {
+  it("exposes a server-managed DeepSeek connection without writing credentials", async () => {
+    const service = new AIService({
+      dataFile: dataFile(),
+      encryptionSecret: "",
+      allowLocalEndpoints: false,
+      staticConnection: {
+        apiKey: "sk-never-return-this-secret",
+        baseUrl: "https://api.deepseek.com",
+        modelId: "deepseek-flash",
+      },
+    });
+    const state = await service.state();
+    expect(state).toMatchObject({
+      available: true,
+      credentialManagementReady: false,
+      persistence: "process-memory",
+    });
+    expect(state.connections[0]).toMatchObject({
+      id: "deepseek-env",
+      origin: "environment",
+      managedByService: true,
+      modelIds: ["deepseek-flash"],
+    });
+    expect(state.routes).toHaveLength(6);
+    expect(state.models.map((model) => model.id)).toEqual(["deepseek-flash"]);
+    expect(JSON.stringify(state)).not.toContain("sk-never-return-this-secret");
+  });
+
   it("encrypts provider credentials, keeps metadata non-secret and detects tampering", async () => {
     const file = dataFile();
     const store = new FileCredentialStore(

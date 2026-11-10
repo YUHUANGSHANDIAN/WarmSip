@@ -144,6 +144,43 @@ describe("service authorization and upstream boundaries", () => {
       await app.close();
     }
   });
+
+  it("validates the current DeepSeek model names and reports configured capabilities", async () => {
+    expect(() =>
+      createServer({
+        ...config,
+        aiBase: "https://api.deepseek.com",
+        aiKey: "server-only-key",
+        aiModel: "deepseek-chat",
+      }),
+    ).toThrow("旧模型名已停用");
+    const app = createServer({
+      ...config,
+      aiBase: "https://api.deepseek.com",
+      aiKey: "server-only-key",
+      aiModel: "deepseek-flash",
+    });
+    try {
+      const response = await app.inject({
+        url: "/api/v1/capabilities",
+        headers,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        ai: true,
+        details: {
+          ai: {
+            configured: true,
+            source: "DeepSeek · 服务端环境",
+          },
+        },
+      });
+      expect(response.body).not.toContain("server-only-key");
+      expect(response.body).not.toContain("sk-");
+    } finally {
+      await app.close();
+    }
+  });
   it("rejects coordinates outside their valid range", async () => {
     const app = createServer(config);
     try {
@@ -187,6 +224,87 @@ describe("service authorization and upstream boundaries", () => {
       expect(p).not.toHaveProperty("rating");
       expect(p).not.toHaveProperty("price");
       expect(response.body).not.toContain("server-secret");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("uses AMap POI 2.0 paths and reports provider infocodes safely", async () => {
+    const invalid = vi.fn(
+      async (_input: URL | Request | string) =>
+        new Response(
+          JSON.stringify({
+            status: "0",
+            info: "INVALID_USER_KEY",
+            infocode: "10001",
+          }),
+        ),
+    );
+    const app = createServer(
+      { ...config, amapKey: "server-secret" },
+      invalid,
+    );
+    try {
+      const response = await app.inject({
+        url: "/api/v1/places/search?city=北京&keyword=咖啡",
+        headers,
+      });
+      expect(response.statusCode).toBe(502);
+      expect(response.json()).toMatchObject({
+        code: "AMAP_INVALID_KEY",
+      });
+      expect(String(invalid.mock.calls[0][0])).toContain("/v5/place/text");
+      expect(response.body).not.toContain("server-secret");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("returns weather provenance and serves a short-lived cache", async () => {
+    const upstream = vi.fn(async (input: URL | Request | string) => {
+      const url = String(input);
+      if (url.includes("/geocode/geo"))
+        return Response.json({
+          status: "1",
+          infocode: "10000",
+          geocodes: [{ adcode: "110000" }],
+        });
+      return Response.json({
+        status: "1",
+        infocode: "10000",
+        lives: [
+          {
+            city: "北京市",
+            weather: "晴",
+            temperature: "18",
+            reporttime: "2026-11-07 10:00:00",
+          },
+        ],
+      });
+    });
+    const app = createServer(
+      { ...config, amapKey: "server-secret" },
+      upstream,
+    );
+    try {
+      const first = await app.inject({
+        url: "/api/v1/weather?city=北京",
+        headers,
+      });
+      const second = await app.inject({
+        url: "/api/v1/weather?city=北京",
+        headers,
+      });
+      expect(first.statusCode).toBe(200);
+      expect(first.json()).toMatchObject({
+        adcode: "110000",
+        city: "北京市",
+        cacheStatus: "fresh",
+        source: "高德地图",
+      });
+      expect(first.json().fetchedAt).toEqual(expect.any(Number));
+      expect(second.json()).toMatchObject({ cacheStatus: "cached" });
+      expect(upstream).toHaveBeenCalledTimes(2);
     } finally {
       await app.close();
     }

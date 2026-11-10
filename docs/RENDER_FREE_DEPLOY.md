@@ -1,12 +1,12 @@
 # Render Free 零付费部署
 
-本说明对应 WarmSip `0.2.0-beta.2` 与 `https://github.com/YUHUANGSHANDIAN/WarmSip`。目标是用现有 Fastify Docker 服务获得一个公网 HTTPS 地址，不购买服务器、域名、数据库、Persistent Disk 或付费实例。
+本说明对应 WarmSip `0.2.0-beta.3` 与 `https://github.com/YUHUANGSHANDIAN/WarmSip`。目标是用现有 Fastify Docker 服务获得一个公网 HTTPS 地址，不购买服务器、域名、数据库、Persistent Disk 或付费实例。
 
 ## 部署前边界
 
 - Render Free 在无请求后休眠，下一次请求可能需要约一分钟唤醒。不会常驻秒级响应。
 - 免费容器文件系统是临时的。基础 URL、环境变量和镜像可恢复，但运行中写入 `/app/data` 的 AI 连接、凭证和用量不保证跨重启保留。
-- 首阶段只验证基础服务：不配置 AI、高德、天气凭证，也不配置 `AI_CREDENTIAL_ENCRYPTION_KEY`。
+- DeepSeek、高德 Web 服务与 JS 底图凭证通过 Render 环境变量在进程启动时读取，可以在休眠重启后恢复。
 - 服务端自身不产生本阶段 Render 实例费用；AI、高德和天气供应商可能独立计费。任何免费额度都以其当前官方政策为准。
 - 仓库仍为私有。Render 需要获得读取 `YUHUANGSHANDIAN/WarmSip` 的 GitHub 权限。
 
@@ -59,18 +59,14 @@ $rng.Dispose()
 | `SERVICE_ACCESS_TOKEN` | 上一步的随机令牌，选择 Secret |
 | `ALLOWED_ORIGINS` | `http://localhost:1420,http://127.0.0.1:1420,http://tauri.localhost,tauri://localhost,https://localhost` |
 | `ALLOW_LOCAL_AI_ENDPOINTS` | `false` |
+| `AI_BASE_URL` | `https://api.deepseek.com` |
+| `AI_MODEL` | `deepseek-flash`；只有明确需要时才改为 `deepseek-v4-pro` |
+| `AI_API_KEY` | 用户自己的 DeepSeek Key，选择 Secret |
+| `AMAP_WEB_SERVICE_KEY` | 高德 Web 服务 Key，选择 Secret |
+| `AMAP_JS_KEY` | 高德 Web 端（JS API）Key |
+| `AMAP_SECURITY_CODE` | 与 JS API Key 配套的安全密钥，选择 Secret |
 
-首阶段不要设置：
-
-- `AMAP_WEB_SERVICE_KEY`
-- `AMAP_JS_KEY`
-- `AMAP_SECURITY_CODE`
-- `AI_BASE_URL`
-- `AI_MODEL`
-- `AI_API_KEY`
-- `AI_CREDENTIAL_ENCRYPTION_KEY`
-- `AI_DATA_FILE`
-- `AI_DATA_DIR`
+`AI_BASE_URL`、`AI_MODEL`、`AI_API_KEY` 必须三项同时填写。不要设置 `AI_CREDENTIAL_ENCRYPTION_KEY`、`AI_DATA_FILE` 或 `AI_DATA_DIR` 来模拟持久化；Render Free 没有持久文件系统。
 
 以后添加 Web/PWA 公网来源时，把完整 Origin 追加到 `ALLOWED_ORIGINS`，例如 `https://warmsip.example.com`。只填写协议、域名和必要端口，不要加路径或通配符。
 
@@ -96,7 +92,7 @@ Invoke-RestMethod https://warmsip-api-xxxx.onrender.com/healthz
 ```json
 {
   "ok": true,
-  "version": "0.2.0-beta.2"
+  "version": "0.2.0-beta.3"
 }
 ```
 
@@ -107,7 +103,7 @@ $headers = @{ Authorization = "Bearer $env:WARMSIP_ACCESS_TOKEN" }
 Invoke-RestMethod https://warmsip-api-xxxx.onrender.com/api/v1/capabilities -Headers $headers
 ```
 
-基础服务预期返回 `ai`、`places`、`weather`、`map` 全为 `false`。这表示服务端在线，但 AI、高德或天气尚未配置。未携带令牌访问该接口应返回 401。
+配置全部提供方后预期 `ai`、`places`、`weather`、`map` 为 `true`。`details` 中 `lastSuccessAt` 为 `null` 表示只是配置存在，尚没有真实成功调用。未携带令牌访问该接口应返回 401。
 
 ## 6. WarmSip 设置
 
@@ -118,7 +114,7 @@ Invoke-RestMethod https://warmsip-api-xxxx.onrender.com/api/v1/capabilities -Hea
 - 服务访问令牌填写 Render 中同一个随机令牌。
 - 点击 **保存并检查连接**。
 
-客户端先调用公开 `/healthz`，最多等待 90 秒，再携带令牌调用 `/api/v1/capabilities`。成功时显示基础服务已连接，并明确列出未配置的外部能力。失败时不会写入“连接成功”结果。
+客户端先调用公开 `/healthz`，最多等待 90 秒，再携带令牌调用 `/api/v1/capabilities`。成功时分别显示 DeepSeek、地点、天气和底图的配置及最近真实调用状态。失败时不会写入“连接成功”结果。
 
 ## 7. 冷启动验收
 
@@ -128,7 +124,7 @@ Invoke-RestMethod https://warmsip-api-xxxx.onrender.com/api/v1/capabilities -Hea
 4. 客户端应显示“正在唤醒免费服务”；约一分钟后应成功。
 5. 在 Render Logs 中确认实例重启，但服务 URL 和 `SERVICE_ACCESS_TOKEN` 仍有效。
 
-基础服务跨冷启动可用，不代表运行时 AI 凭证仍在。任何保存在 `/app/data` 的 AI 连接和用量都属于临时状态。
+环境变量中的 DeepSeek 与高德 Key 会在冷启动后重新读取。进程内 usage、最近诊断时间和地图代理状态仍会清空；它们不是持久账目。
 
 ## 8. 常见错误
 
@@ -140,13 +136,19 @@ Invoke-RestMethod https://warmsip-api-xxxx.onrender.com/api/v1/capabilities -Hea
 | 502/503 | 服务正在启动、崩溃或上游未配置 |
 | 健康检查失败但业务 401 | `/healthz` 不应鉴权，检查反向代理路径 |
 | AI 设置待配置 | 基础部署的正常状态；外部 AI 尚未启用 |
-| AI 连接重启后消失 | Render Free 使用临时文件系统，零付费阶段预期行为 |
+| 运行时 AI 连接重启后消失 | Render Free 使用临时文件系统；请使用静态 `AI_*` 环境变量 |
 
-## 9. 后续启用外部服务
+## 9. 真实联调
 
-地图和天气可以先把 `AMAP_WEB_SERVICE_KEY`、`AMAP_JS_KEY`、`AMAP_SECURITY_CODE` 作为 Render Secret 配置，再重新部署。必须先确认高德账号的免费额度和计费政策。
+在用户本地终端设置 `WARMSIP_BASE_URL` 与 `WARMSIP_ACCESS_TOKEN` 环境变量，然后运行：
 
-单 Provider 无状态 AI 可以使用服务端 `AI_BASE_URL`、`AI_MODEL`、`AI_API_KEY` 配置。多 Provider 的管理、OAuth、任务路由和用量若要求跨实例重启持久保存，需要另行设计安全的外部持久存储或付费 Persistent Disk；本零付费阶段不添加。
+```powershell
+npm run live:check -- --confirm-live
+```
+
+该脚本只使用假资料，执行一次 DeepSeek 选礼流、北京/上海 POI、地点详情、地理编码、逆地理编码与天气，并把不含 Key、Prompt 或生成正文的脱敏证据写入 `artifacts/`。只有显式添加 `--cancel-check` 才会发起第二次可能计费的短 AI 请求。高德调用会消耗相应账号配额。
+
+多 Provider 运行时管理、OAuth 和持久用量若要跨 Render 重启保存，仍需要另行设计安全外部存储；本零付费阶段不添加。
 
 ## 10. 完成标记
 
@@ -155,8 +157,8 @@ Render Free 只有在以下证据全部实际取得后，才能标记为“已�
 - Render 实例为 Free 且状态 `Live`
 - 公网 `/healthz` 返回 200
 - 无令牌能力查询返回 401
-- 带令牌能力查询返回 200 且外部能力为 false
+- 带令牌能力查询返回 200，配置状态与真实调用状态区分正确
 - WarmSip 设置页连接成功
-- 冷启动后再次连接成功
+- 冷启动后再次连接成功，环境变量中的 AI/高德能力仍可用
 - Render 日志不含令牌或请求正文
 - GitHub 仓库可见性未改变，没有付费资源或健康检查路由
