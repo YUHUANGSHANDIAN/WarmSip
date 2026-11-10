@@ -2,6 +2,8 @@
 
 `v0.2.0-beta.3` 与 `v0.2.0-beta.4` 的 Android 模拟器门禁均失败，对应 Tag 与失败 Draft 保留且不可移动；修复 `/places/new` 路由误匹配后，以新的 PR、主分支门禁和同一提交创建 `v0.2.0-beta.5`。不得覆盖任何已有标签与资产。
 
+`v0.2.0-beta.5` 已作为公开预发布完成。六平台构建均来自提交 `396551d73995a9c641c80d380a0097ce5cbbdc09`；21 个 Release 资产经统一 SHA256 清单下载回验后公开。
+
 每个平台单独记录：配置、编译、签名、安装启动、核心流程验证和上传。GitHub Actions 的平台矩阵使用 `fail-fast: false`，一个平台失败不会掩盖其他平台的结果。发布资产必须带 `SHA256SUMS`，并在上传前执行校验。
 
 当前门禁包括 ESLint、TypeScript、48 项 Vitest、16 项 Playwright 运行、服务端和 Web/PWA 生产构建、生产依赖审计、客户端包边界检查、Docker 健康与鉴权、Tauri、Capacitor 和 ArkWeb 配置。高德、天气、AI 真实推理、签名、公证和 HarmonyOS HAP 必须依据实际凭证与设备日志填写；模拟测试不得写成已联调。
